@@ -86,6 +86,7 @@ func LoadArgs(args string, container interface{}) error {
 		}
 		keyString := kv[0]
 		valueString := kv[1]
+		/*自containerValue中提取keyString名称的field*/
 		keyField := GetKeyField(keyString, containerValue)
 		if !keyField.IsValid() {
 			unknownArgs = append(unknownArgs, pair)

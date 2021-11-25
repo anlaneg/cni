@@ -79,7 +79,7 @@ func ExecPluginWithResult(ctx context.Context, pluginPath string, netconf []byte
 		exec = defaultExec
 	}
 
-	stdoutBytes, err := exec.ExecPlugin(ctx, pluginPath, netconf, args.AsEnv())
+	stdoutBytes, err := exec.ExecPlugin(ctx, pluginPath/*插件路径*/, netconf/*标准输入*/, args.AsEnv()/*环境变量*/)
 	if err != nil {
 		return nil, err
 	}

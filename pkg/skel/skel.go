@@ -43,9 +43,13 @@ type CmdArgs struct {
 }
 
 type dispatcher struct {
+	/*获取环境变量函数*/
 	Getenv func(string) string
+	/*标准输入*/
 	Stdin  io.Reader
+	/*标准输出*/
 	Stdout io.Writer
+	/*标准错误输出*/
 	Stderr io.Writer
 
 	ConfVersionDecoder version.ConfigDecoder
@@ -58,7 +62,7 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, *types.Error) {
 	var cmd, contID, netns, ifName, args, path string
 
 	vars := []struct {
-		name      string
+		name      string /*环境变量名称*/
 		val       *string
 		reqForCmd reqForCmdEntry
 	}{
@@ -120,8 +124,10 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, *types.Error) {
 
 	argsMissing := make([]string, 0)
 	for _, v := range vars {
+		/*取v.name规定的环境变量的值，并设置v.value*/
 		*v.val = t.Getenv(v.name)
 		if *v.val == "" {
+			/*此环境变量未配置，*/
 			if v.reqForCmd[cmd] || v.name == "CNI_COMMAND" {
 				argsMissing = append(argsMissing, v.name)
 			}
@@ -129,6 +135,7 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, *types.Error) {
 	}
 
 	if len(argsMissing) > 0 {
+		/*存在多个未配置的环境变量，异常*/
 		joined := strings.Join(argsMissing, ",")
 		return "", nil, types.NewError(types.ErrInvalidEnvironmentVariables, fmt.Sprintf("required env variables [%s] missing", joined), "")
 	}
@@ -137,6 +144,7 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, *types.Error) {
 		t.Stdin = bytes.NewReader(nil)
 	}
 
+	/*读取标准输入*/
 	stdinData, err := ioutil.ReadAll(t.Stdin)
 	if err != nil {
 		return "", nil, types.NewError(types.ErrIOFailure, fmt.Sprintf("error reading from stdin: %v", err), "")
@@ -163,6 +171,7 @@ func (t *dispatcher) checkVersionAndCall(cmdArgs *CmdArgs, pluginVersionInfo ver
 		return types.NewError(types.ErrIncompatibleCNIVersion, "incompatible CNI versions", verErr.Details())
 	}
 
+	/*触发回调*/
 	if err = toCall(cmdArgs); err != nil {
 		if e, ok := err.(*types.Error); ok {
 			// don't wrap Error in Error
@@ -191,6 +200,7 @@ func validateConfig(jsonBytes []byte) *types.Error {
 }
 
 func (t *dispatcher) pluginMain(cmdAdd, cmdCheck, cmdDel func(_ *CmdArgs) error, versionInfo version.PluginInfo, about string) *types.Error {
+	/*自环境变量中提取cmd,cmdArgs*/
 	cmd, cmdArgs, err := t.getCmdArgsFromEnv()
 	if err != nil {
 		// Print the about string to stderr when no command is set
@@ -216,8 +226,10 @@ func (t *dispatcher) pluginMain(cmdAdd, cmdCheck, cmdDel func(_ *CmdArgs) error,
 
 	switch cmd {
 	case "ADD":
+		/*触发cmdAdd回调*/
 		err = t.checkVersionAndCall(cmdArgs, versionInfo, cmdAdd)
 	case "CHECK":
+		/*触发cmdCheck回调*/
 		configVersion, err := t.ConfVersionDecoder.Decode(cmdArgs.StdinData)
 		if err != nil {
 			return types.NewError(types.ErrDecodingFailure, err.Error(), "")
@@ -240,6 +252,7 @@ func (t *dispatcher) pluginMain(cmdAdd, cmdCheck, cmdDel func(_ *CmdArgs) error,
 		}
 		return types.NewError(types.ErrIncompatibleCNIVersion, "plugin version does not allow CHECK", "")
 	case "DEL":
+		/*触发cmdDel回调*/
 		err = t.checkVersionAndCall(cmdArgs, versionInfo, cmdDel)
 	case "VERSION":
 		if err := versionInfo.Encode(t.Stdout); err != nil {
@@ -288,6 +301,7 @@ func PluginMainWithError(cmdAdd, cmdCheck, cmdDel func(_ *CmdArgs) error, versio
 //
 // To have more control over error handling, use PluginMainWithError() instead.
 func PluginMain(cmdAdd, cmdCheck, cmdDel func(_ *CmdArgs) error, versionInfo version.PluginInfo, about string) {
+	/*自env中获取cmd，并按cmd要求执行cmdAdd/cmdCheck/cmdDel*/
 	if e := PluginMainWithError(cmdAdd, cmdCheck, cmdDel, versionInfo, about); e != nil {
 		if err := e.Print(); err != nil {
 			log.Print("Error writing error JSON to stdout: ", err)

@@ -58,12 +58,15 @@ func (n *IPNet) UnmarshalJSON(data []byte) error {
 
 // NetConf describes a network.
 type NetConf struct {
+	/*cni版本号*/
 	CNIVersion string `json:"cniVersion,omitempty"`
 
+	/*network名称*/
 	Name         string          `json:"name,omitempty"`
 	Type         string          `json:"type,omitempty"`
 	Capabilities map[string]bool `json:"capabilities,omitempty"`
 	IPAM         IPAM            `json:"ipam,omitempty"`
+	/*dns相关配置*/
 	DNS          DNS             `json:"dns"`
 
 	RawPrevResult map[string]interface{} `json:"prevResult,omitempty"`

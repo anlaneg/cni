@@ -24,18 +24,22 @@ import (
 // FindInPath returns the full path of the plugin by searching in the provided path
 func FindInPath(plugin string, paths []string) (string, error) {
 	if plugin == "" {
+		/*plugin名称不能为空*/
 		return "", fmt.Errorf("no plugin name provided")
 	}
 
 	if strings.ContainsRune(plugin, os.PathSeparator) {
+		/*plgin名称中不得有路径*/
 		return "", fmt.Errorf("invalid plugin name: %s", plugin)
 	}
 
 	if len(paths) == 0 {
+		/*待查询路径数组不得为空*/
 		return "", fmt.Errorf("no paths provided")
 	}
 
 	for _, path := range paths {
+		/*在paths数组中查找plgin，如果找到返回全路径*/
 		for _, fe := range ExecutableFileExtensions {
 			fullpath := filepath.Join(path, plugin) + fe
 			if fi, err := os.Stat(fullpath); err == nil && fi.Mode().IsRegular() {

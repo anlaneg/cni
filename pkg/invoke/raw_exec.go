@@ -31,11 +31,13 @@ type RawExec struct {
 	Stderr io.Writer
 }
 
+/*通过pluginPath调用插件*/
 func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	c := exec.CommandContext(ctx, pluginPath)
 	c.Env = environ
+	/*向标准输入提供config*/
 	c.Stdin = bytes.NewBuffer(stdinData)
 	c.Stdout = stdout
 	c.Stderr = stderr
@@ -83,6 +85,7 @@ func (e *RawExec) pluginErr(err error, stdout, stderr []byte) error {
 	return &emsg
 }
 
+/*在paths列表中查找plugin,获得其绝对路径*/
 func (e *RawExec) FindInPath(plugin string, paths []string) (string, error) {
 	return FindInPath(plugin, paths)
 }

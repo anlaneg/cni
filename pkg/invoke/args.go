@@ -54,6 +54,7 @@ type Args struct {
 var _ CNIArgs = &Args{}
 
 func (args *Args) AsEnv() []string {
+	/*取当前进程env*/
 	env := os.Environ()
 	pluginArgsStr := args.PluginArgsStr
 	if pluginArgsStr == "" {
@@ -62,6 +63,7 @@ func (args *Args) AsEnv() []string {
 
 	// Duplicated values which come first will be overridden, so we must put the
 	// custom values in the end to avoid being overridden by the process environments.
+	/*将args中的内容转换为env,并返回*/
 	env = append(env,
 		"CNI_COMMAND="+args.Command,
 		"CNI_CONTAINERID="+args.ContainerID,

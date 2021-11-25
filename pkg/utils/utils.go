@@ -38,9 +38,11 @@ var cniReg = regexp.MustCompile(`^` + cniValidNameChars + `*$`)
 func ValidateContainerID(containerID string) *types.Error {
 
 	if containerID == "" {
+		/*containerID不得为空*/
 		return types.NewError(types.ErrUnknownContainer, "missing containerID", "")
 	}
 	if !cniReg.MatchString(containerID) {
+		/*containerID不得包含非规定字符*/
 		return types.NewError(types.ErrInvalidEnvironmentVariables, "invalid characters in containerID", containerID)
 	}
 	return nil
@@ -50,9 +52,11 @@ func ValidateContainerID(containerID string) *types.Error {
 func ValidateNetworkName(networkName string) *types.Error {
 
 	if networkName == "" {
+		/*containerID不得为空*/
 		return types.NewError(types.ErrInvalidNetworkConfig, "missing network name:", "")
 	}
 	if !cniReg.MatchString(networkName) {
+		/*containerID不得包含非规定字符*/
 		return types.NewError(types.ErrInvalidNetworkConfig, "invalid characters found in network name", networkName)
 	}
 	return nil
@@ -66,15 +70,19 @@ func ValidateNetworkName(networkName string) *types.Error {
 // ref to https://github.com/torvalds/linux/blob/master/net/core/dev.c#L1024
 func ValidateInterfaceName(ifName string) *types.Error {
 	if len(ifName) == 0 {
+		/*接口名称不得为空*/
 		return types.NewError(types.ErrInvalidEnvironmentVariables, "interface name is empty", "")
 	}
 	if len(ifName) > maxInterfaceNameLength {
+		/*接口名称不得超过指定大小*/
 		return types.NewError(types.ErrInvalidEnvironmentVariables, "interface name is too long", fmt.Sprintf("interface name should be less than %d characters", maxInterfaceNameLength+1))
 	}
 	if ifName == "." || ifName == ".." {
+		/*不得包含目录符*/
 		return types.NewError(types.ErrInvalidEnvironmentVariables, "interface name is . or ..", "")
 	}
 	for _, r := range bytes.Runes([]byte(ifName)) {
+		/*不能有空格，':','/'符*/
 		if r == '/' || r == ':' || unicode.IsSpace(r) {
 			return types.NewError(types.ErrInvalidEnvironmentVariables, "interface name contains / or : or whitespace characters", "")
 		}

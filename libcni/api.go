@@ -73,7 +73,9 @@ type NetworkConfigList struct {
 	Name         string
 	CNIVersion   string
 	DisableCheck bool
+	/*一组plugin配置*/
 	Plugins      []*NetworkConfig
+	/*原始的conflist文件配置数据*/
 	Bytes        []byte
 }
 
@@ -95,6 +97,7 @@ type CNI interface {
 }
 
 type CNIConfig struct {
+	/*查询插件的路径列表*/
 	Path     []string
 	exec     invoke.Exec
 	cacheDir string
@@ -107,6 +110,7 @@ var _ CNI = &CNIConfig{}
 // in the given paths and use the given exec interface to run those plugins,
 // or if the exec interface is not given, will use a default exec handler.
 func NewCNIConfig(path []string, exec invoke.Exec) *CNIConfig {
+	/*设置插件查询路径列表*/
 	return NewCNIConfigWithCacheDir(path, "", exec)
 }
 
@@ -135,6 +139,7 @@ func buildOneConfig(name, cniVersion string, orig *NetworkConfig, prevResult typ
 	}
 
 	// Ensure every config uses the same name and version
+	/*在orig中合入inject需要变更的项*/
 	orig, err = InjectConf(orig, inject)
 	if err != nil {
 		return nil, err
@@ -181,6 +186,7 @@ func injectRuntimeConfig(orig *NetworkConfig, rt *RuntimeConf) (*NetworkConfig, 
 // ensure we have a usable exec if the CNIConfig was not given one
 func (c *CNIConfig) ensureExec() invoke.Exec {
 	if c.exec == nil {
+		/*初始化c.exec*/
 		c.exec = &invoke.DefaultExec{
 			RawExec:       &invoke.RawExec{Stderr: os.Stderr},
 			PluginDecoder: version.PluginDecoder{},
@@ -390,34 +396,41 @@ func (c *CNIConfig) GetNetworkCachedConfig(net *NetworkConfig, rt *RuntimeConf) 
 	return c.getCachedConfig(net.Network.Name, rt)
 }
 
+/*添加network*/
 func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) (types.Result, error) {
 	c.ensureExec()
+	/*取插件执行路径*/
 	pluginPath, err := c.exec.FindInPath(net.Network.Type, c.Path)
 	if err != nil {
 		return nil, err
 	}
+	/*检查containerid是否合乎约定*/
 	if err := utils.ValidateContainerID(rt.ContainerID); err != nil {
 		return nil, err
 	}
+	/*检查network name是否合乎约定*/
 	if err := utils.ValidateNetworkName(name); err != nil {
 		return nil, err
 	}
+	/*检查接口名称是否合乎约定*/
 	if err := utils.ValidateInterfaceName(rt.IfName); err != nil {
 		return nil, err
 	}
 
+	/*配置用json串*/
 	newConf, err := buildOneConfig(name, cniVersion, net, prevResult, rt)
 	if err != nil {
 		return nil, err
 	}
 
-	return invoke.ExecPluginWithResult(ctx, pluginPath, newConf.Bytes, c.args("ADD", rt), c.exec)
+	return invoke.ExecPluginWithResult(ctx, pluginPath/*插件路径*/, newConf.Bytes/*配置内容*/, c.args("ADD", rt)/*配置参数*/, c.exec)
 }
 
 // AddNetworkList executes a sequence of plugins with the ADD command
 func (c *CNIConfig) AddNetworkList(ctx context.Context, list *NetworkConfigList, rt *RuntimeConf) (types.Result, error) {
 	var err error
 	var result types.Result
+	/*遍历此conflist中的所有插件*/
 	for _, net := range list.Plugins {
 		result, err = c.addNetwork(ctx, list.Name, list.CNIVersion, net, result, rt)
 		if err != nil {

@@ -57,15 +57,18 @@ func parseArgs(args string) ([][2]string, error) {
 }
 
 func main() {
+	/*参数必须大于4*/
 	if len(os.Args) < 4 {
 		usage()
 		return
 	}
 
+	/*确定netconf对应的目录*/
 	netdir := os.Getenv(EnvNetDir)
 	if netdir == "" {
 		netdir = DefaultNetDir
 	}
+	/*取在netdir下指定名称的conflist配置*/
 	netconf, err := libcni.LoadConfList(netdir, os.Args[2])
 	if err != nil {
 		exit(err)
@@ -103,6 +106,7 @@ func main() {
 	s := sha512.Sum512([]byte(netns))
 	containerID := fmt.Sprintf("cnitool-%x", s[:10])
 
+	/*自EnvCNIPATH中获取plgin的查找路径，并构造CNIConfig对象*/
 	cninet := libcni.NewCNIConfig(filepath.SplitList(os.Getenv(EnvCNIPath)), nil)
 
 	rt := &libcni.RuntimeConf{
@@ -115,15 +119,18 @@ func main() {
 
 	switch os.Args[1] {
 	case CmdAdd:
+		/*network添加*/
 		result, err := cninet.AddNetworkList(context.TODO(), netconf, rt)
 		if result != nil {
 			_ = result.Print()
 		}
 		exit(err)
 	case CmdCheck:
+		/*network显示*/
 		err := cninet.CheckNetworkList(context.TODO(), netconf, rt)
 		exit(err)
 	case CmdDel:
+		/*network移除*/
 		exit(cninet.DelNetworkList(context.TODO(), netconf, rt))
 	}
 }
