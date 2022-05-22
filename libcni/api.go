@@ -66,14 +66,17 @@ type RuntimeConf struct {
 
 type NetworkConfig struct {
 	Network *types.NetConf
+	/*types.Netconf的原始配置数据,利用其生成的Network*/
 	Bytes   []byte
 }
 
 type NetworkConfigList struct {
+	/*Configlist名称*/
 	Name         string
+	/*configlist配置cniversion*/
 	CNIVersion   string
 	DisableCheck bool
-	/*一组plugin配置*/
+	/*configlist配置的一组NetworkConfig*/
 	Plugins      []*NetworkConfig
 	/*原始的conflist文件配置数据*/
 	Bytes        []byte
@@ -163,17 +166,22 @@ func buildOneConfig(name, cniVersion string, orig *NetworkConfig, prevResult typ
 func injectRuntimeConfig(orig *NetworkConfig, rt *RuntimeConf) (*NetworkConfig, error) {
 	var err error
 
+	/*收集支持的capability对应的Args*/
 	rc := make(map[string]interface{})
+	/*capabilities是一个K,v结构，key指定能务，v指定是否支持*/
 	for capability, supported := range orig.Network.Capabilities {
 		if !supported {
+			/*跳过不支持的capability*/
 			continue
 		}
+		/*取支持的capability的args*/
 		if data, ok := rt.CapabilityArgs[capability]; ok {
 			rc[capability] = data
 		}
 	}
 
 	if len(rc) > 0 {
+		/*合入capability的args*/
 		orig, err = InjectConf(orig, map[string]interface{}{"runtimeConfig": rc})
 		if err != nil {
 			return nil, err
@@ -185,6 +193,7 @@ func injectRuntimeConfig(orig *NetworkConfig, rt *RuntimeConf) (*NetworkConfig, 
 
 // ensure we have a usable exec if the CNIConfig was not given one
 func (c *CNIConfig) ensureExec() invoke.Exec {
+	/*确认c.exec已初始化*/
 	if c.exec == nil {
 		/*初始化c.exec*/
 		c.exec = &invoke.DefaultExec{
@@ -397,10 +406,10 @@ func (c *CNIConfig) GetNetworkCachedConfig(net *NetworkConfig, rt *RuntimeConf) 
 }
 
 /*添加network*/
-func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) (types.Result, error) {
+func (c *CNIConfig) addNetwork(ctx context.Context, name/*network名称*/, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) (types.Result, error) {
 	c.ensureExec()
 	/*取插件执行路径*/
-	pluginPath, err := c.exec.FindInPath(net.Network.Type, c.Path)
+	pluginPath, err := c.exec.FindInPath(net.Network.Type/*此network类型为插件名称*/, c.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -423,6 +432,7 @@ func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net
 		return nil, err
 	}
 
+	/*运行插件并返回运行结果*/
 	return invoke.ExecPluginWithResult(ctx, pluginPath/*插件路径*/, newConf.Bytes/*配置内容*/, c.args("ADD", rt)/*配置参数*/, c.exec)
 }
 
@@ -430,7 +440,7 @@ func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net
 func (c *CNIConfig) AddNetworkList(ctx context.Context, list *NetworkConfigList, rt *RuntimeConf) (types.Result, error) {
 	var err error
 	var result types.Result
-	/*遍历此conflist中的所有插件*/
+	/*遍历此conflist中的所有network config，逐个添加*/
 	for _, net := range list.Plugins {
 		result, err = c.addNetwork(ctx, list.Name, list.CNIVersion, net, result, rt)
 		if err != nil {
@@ -445,6 +455,7 @@ func (c *CNIConfig) AddNetworkList(ctx context.Context, list *NetworkConfigList,
 	return result, nil
 }
 
+/*执行CHECK*/
 func (c *CNIConfig) checkNetwork(ctx context.Context, name, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) error {
 	c.ensureExec()
 	pluginPath, err := c.exec.FindInPath(net.Network.Type, c.Path)
@@ -487,6 +498,7 @@ func (c *CNIConfig) CheckNetworkList(ctx context.Context, list *NetworkConfigLis
 	return nil
 }
 
+/*执行删除network*/
 func (c *CNIConfig) delNetwork(ctx context.Context, name, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) error {
 	c.ensureExec()
 	pluginPath, err := c.exec.FindInPath(net.Network.Type, c.Path)

@@ -35,7 +35,7 @@ func init() {
 	convert.RegisterConverter(ImplementedSpecVersion, []string{"0.1.0"}, convertTo010)
 
 	// Creator
-	convert.RegisterCreator(supportedVersions, NewResult)
+	convert.RegisterCreator(supportedVersions, NewResult) /*注册creator*/
 }
 
 // Compatibility types for CNI version 0.1.0 and 0.2.0
@@ -43,12 +43,14 @@ func init() {
 // NewResult creates a new Result object from JSON data. The JSON data
 // must be compatible with the CNI versions implemented by this type.
 func NewResult(data []byte) (types.Result, error) {
+	/*由json解析出result*/
 	result := &Result{}
 	if err := json.Unmarshal(data, result); err != nil {
 		return nil, err
 	}
 	for _, v := range supportedVersions {
 		if result.CNIVersion == v {
+			/*版本相等，返回result对象*/
 			if result.CNIVersion == "" {
 				result.CNIVersion = "0.1.0"
 			}

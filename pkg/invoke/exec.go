@@ -76,14 +76,17 @@ type Exec interface {
 
 func ExecPluginWithResult(ctx context.Context, pluginPath string, netconf []byte, args CNIArgs, exec Exec) (types.Result, error) {
 	if exec == nil {
+		/*使用defaultExec*/
 		exec = defaultExec
 	}
 
-	stdoutBytes, err := exec.ExecPlugin(ctx, pluginPath/*插件路径*/, netconf/*标准输入*/, args.AsEnv()/*环境变量*/)
+	/*直接运行pluginPath对应的文件*/
+	stdoutBytes, err := exec.ExecPlugin(ctx, pluginPath/*插件路径*/, netconf/*输入的网络配置JSon串*/, args.AsEnv()/*环境变量*/)
 	if err != nil {
 		return nil, err
 	}
 
+	/*返回运行结果*/
 	return create.CreateFromBytes(stdoutBytes)
 }
 

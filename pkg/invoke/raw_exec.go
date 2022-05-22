@@ -31,11 +31,12 @@ type RawExec struct {
 	Stderr io.Writer
 }
 
-/*通过pluginPath调用插件*/
-func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
+/*通过pluginPath直接运行插件，并提供输入的json串及环境变量*/
+func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string/*插件路径*/, stdinData []byte/*输入的json串*/, environ []string) ([]byte, error) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	c := exec.CommandContext(ctx, pluginPath)
+	/*指明环境变量*/
 	c.Env = environ
 	/*向标准输入提供config*/
 	c.Stdin = bytes.NewBuffer(stdinData)
@@ -44,6 +45,7 @@ func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData [
 
 	// Retry the command on "text file busy" errors
 	for i := 0; i <= 5; i++ {
+		/*执行此插件*/
 		err := c.Run()
 
 		// Command succeeded
@@ -68,6 +70,8 @@ func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData [
 	if e.Stderr != nil && stderr.Len() > 0 {
 		_, _ = stderr.WriteTo(e.Stderr)
 	}
+	
+	/*返回执行结果*/
 	return stdout.Bytes(), nil
 }
 

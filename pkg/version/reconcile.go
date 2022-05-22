@@ -31,17 +31,20 @@ func (e *ErrorIncompatible) Error() string {
 
 type Reconciler struct{}
 
+/*检查给定版本configVersion是否为pluginInfo支持的版本*/
 func (r *Reconciler) Check(configVersion string, pluginInfo PluginInfo) *ErrorIncompatible {
-	return r.CheckRaw(configVersion, pluginInfo.SupportedVersions())
+	return r.CheckRaw(configVersion, pluginInfo.SupportedVersions()/*取插件支持的版本*/)
 }
 
 func (*Reconciler) CheckRaw(configVersion string, supportedVersions []string) *ErrorIncompatible {
 	for _, supportedVersion := range supportedVersions {
 		if configVersion == supportedVersion {
+			/*如果configVersion被supportedVersions包含，则返回nil*/
 			return nil
 		}
 	}
 
+	/*遇到不支持的版本*/
 	return &ErrorIncompatible{
 		Config:    configVersion,
 		Supported: supportedVersions,

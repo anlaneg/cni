@@ -22,5 +22,6 @@ import (
 type ConfigDecoder struct{}
 
 func (*ConfigDecoder) Decode(jsonBytes []byte) (string, error) {
+	/*解析cni版本*/
 	return create.DecodeVersion(jsonBytes)
 }

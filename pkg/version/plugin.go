@@ -92,6 +92,7 @@ func ParseVersion(version string) (int, int, int, error) {
 
 	parts := strings.Split(version, ".")
 	if len(parts) >= 4 {
+		/*version只有三部分*/
 		return -1, -1, -1, fmt.Errorf("invalid version %q: too many parts", version)
 	}
 
@@ -121,16 +122,19 @@ func ParseVersion(version string) (int, int, int, error) {
 // numbers, and compares them to determine whether the first version is greater
 // than or equal to the second
 func GreaterThanOrEqualTo(version, otherVersion string) (bool, error) {
+	/*返回version各分版本*/
 	firstMajor, firstMinor, firstMicro, err := ParseVersion(version)
 	if err != nil {
 		return false, err
 	}
 
+	/*返回各otherVersion各分版本*/
 	secondMajor, secondMinor, secondMicro, err := ParseVersion(otherVersion)
 	if err != nil {
 		return false, err
 	}
 
+	/*检查各分量版本*/
 	if firstMajor > secondMajor {
 		return true, nil
 	} else if firstMajor == secondMajor {

@@ -43,16 +43,20 @@ func (e NoConfigsFoundError) Error() string {
 }
 
 func ConfFromBytes(bytes []byte) (*NetworkConfig, error) {
+	/*定义NetworkConfig*/
 	conf := &NetworkConfig{Bytes: bytes, Network: &types.NetConf{}}
+	/*解析bytes,填充conf.Network*/
 	if err := json.Unmarshal(bytes, conf.Network); err != nil {
 		return nil, fmt.Errorf("error parsing configuration: %w", err)
 	}
+	/*必须指定network.Type*/
 	if conf.Network.Type == "" {
 		return nil, fmt.Errorf("error parsing configuration: missing 'type'")
 	}
 	return conf, nil
 }
 
+/*读取文件filename,返回NetworkConfig*/
 func ConfFromFile(filename string) (*NetworkConfig, error) {
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -63,13 +67,13 @@ func ConfFromFile(filename string) (*NetworkConfig, error) {
 
 /*依据配置文件，建立NetworkConfigList*/
 func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
-	/*转换bytes,先解析为key,value集合*/
+	/*bytes是json格式，执行解析*/
 	rawList := make(map[string]interface{})
 	if err := json.Unmarshal(bytes, &rawList); err != nil {
 		return nil, fmt.Errorf("error parsing configuration list: %w", err)
 	}
 
-	/*取name配置*/
+	/*取name配置，其必须为string类型*/
 	rawName, ok := rawList["name"]
 	if !ok {
 		return nil, fmt.Errorf("error parsing configuration list: no name")
@@ -79,7 +83,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		return nil, fmt.Errorf("error parsing configuration list: invalid name type %T", rawName)
 	}
 
-	/*取cni版本*/
+	/*取cni版本，其必须为string类型*/
 	var cniVersion string
 	rawVersion, ok := rawList["cniVersion"]
 	if ok {
@@ -89,6 +93,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		}
 	}
 
+	/*取disableCheck,其必须为bool类型*/
 	disableCheck := false
 	if rawDisableCheck, ok := rawList["disableCheck"]; ok {
 		disableCheck, ok = rawDisableCheck.(bool)
@@ -105,7 +110,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		Bytes:        bytes,
 	}
 
-	/*取plugins配置*/
+	/*取plugins，其必须为数组类型*/
 	var plugins []interface{}
 	plug, ok := rawList["plugins"]
 	if !ok {
@@ -116,16 +121,17 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		return nil, fmt.Errorf("error parsing configuration list: invalid 'plugins' type %T", plug)
 	}
 	if len(plugins) == 0 {
-		/*plugins配置不得为空*/
+		/*plugins长度不能为0*/
 		return nil, fmt.Errorf("error parsing configuration list: no plugins in list")
 	}
 
-	/*依据相应配置重女目土之netConf*/
+	/*遍历plugins中所有成员，其为json串，利用其生成NetConf*/
 	for i, conf := range plugins {
 		newBytes, err := json.Marshal(conf)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal plugin config %d: %w", i, err)
 		}
+		/*利用newBytes生成netconf对象*/
 		netConf, err := ConfFromBytes(newBytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse plugin config %d: %w", i, err)
@@ -146,8 +152,9 @@ func ConfListFromFile(filename string) (*NetworkConfigList, error) {
 }
 
 /*收集满足后续的配置文件列表*/
-func ConfFiles(dir string, extensions []string) ([]string, error) {
+func ConfFiles(dir string/*目录名称*/, extensions []string/*要查找的文件后缀*/) ([]string, error) {
 	// In part, adapted from rkt/networking/podenv.go#listFiles
+	/*收集dir目录下所有文件*/
 	files, err := ioutil.ReadDir(dir)
 	switch {
 	case err == nil: // break
@@ -171,6 +178,8 @@ func ConfFiles(dir string, extensions []string) ([]string, error) {
 			}
 		}
 	}
+	
+	/*返回满足要求的文件*/
 	return confFiles, nil
 }
 
@@ -185,6 +194,7 @@ func LoadConf(dir, name string) (*NetworkConfig, error) {
 	}
 	sort.Strings(files)
 
+	/*遍历files,加载配置，并匹配*/
 	for _, confFile := range files {
 		conf, err := ConfFromFile(confFile)
 		if err != nil {
@@ -197,12 +207,15 @@ func LoadConf(dir, name string) (*NetworkConfig, error) {
 	return nil, NotFoundError{dir, name}
 }
 
-/*在指定目录加载配置文件*/
+/*在指定目录加载后缀为.conflist的配置文件，返回名称为name的配置*/
 func LoadConfList(dir, name string) (*NetworkConfigList, error) {
+	/*在dir目录，收集后缀为.conflist的文件列表*/
 	files, err := ConfFiles(dir, []string{".conflist"})
 	if err != nil {
 		return nil, err
 	}
+	
+	/*针对组文件进行排序*/
 	sort.Strings(files)
 
 	/*按顺序加载配置文件*/
@@ -218,6 +231,7 @@ func LoadConfList(dir, name string) (*NetworkConfigList, error) {
 		}
 	}
 
+	/*在dir中后缀为.configlist的文件中没有找到，名称为name的配置，尝试直接加载name文件*/
 	// Try and load a network configuration file (instead of list)
 	// from the same name, then upconvert.
 	singleConf, err := LoadConf(dir, name)
@@ -234,6 +248,7 @@ func LoadConfList(dir, name string) (*NetworkConfigList, error) {
 	return ConfListFromConf(singleConf)
 }
 
+/*实现NetworkConfig对象字段修改，合入newValues指定的值*/
 func InjectConf(original *NetworkConfig, newValues map[string]interface{}) (*NetworkConfig, error) {
 	config := make(map[string]interface{})
 	/*由字节串，打包成config对象*/
@@ -255,13 +270,13 @@ func InjectConf(original *NetworkConfig, newValues map[string]interface{}) (*Net
 		config[key] = value
 	}
 
-	/*再由对象打包成字节串（这一步单纯是为了校验？）*/
+	/*再由对象打包成字节串*/
 	newBytes, err := json.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
 
-	/*由字节串再打包成对象。*/
+	/*由字节串再打包成对象*/
 	return ConfFromBytes(newBytes)
 }
 
@@ -278,15 +293,18 @@ func ConfListFromConf(original *NetworkConfig) (*NetworkConfigList, error) {
 		return nil, err
 	}
 
+	/*构造raw格式的list*/
 	rawConfigList := map[string]interface{}{
 		"name":       original.Network.Name,
 		"cniVersion": original.Network.CNIVersion,
 		"plugins":    []interface{}{rawConfig},
 	}
 
+	/*将其打成json串*/
 	b, err := json.Marshal(rawConfigList)
 	if err != nil {
 		return nil, err
 	}
+	/*再由json串重新建立*/
 	return ConfListFromBytes(b)
 }

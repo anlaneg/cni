@@ -28,10 +28,13 @@ import (
 
 // Protocol parameters are passed to the plugins via OS environment variables.
 const (
+	/*环境变量，用于指定Cni插件的查找路径，不能为空*/
 	EnvCNIPath        = "CNI_PATH"
+	/*环境变量名称，用于指定netconf对应的目录，可以为空*/
 	EnvNetDir         = "NETCONFPATH"
 	EnvCapabilityArgs = "CAP_ARGS"
 	EnvCNIArgs        = "CNI_ARGS"
+	/*环境变量名称，用于指定接口名称，可以为空*/
 	EnvCNIIfname      = "CNI_IFNAME"
 
 	DefaultNetDir = "/etc/cni/net.d"
@@ -74,6 +77,7 @@ func main() {
 		exit(err)
 	}
 
+	/*通过EnvCapabilityArgs,加载capabilityArgs*/
 	var capabilityArgs map[string]interface{}
 	capabilityArgsValue := os.Getenv(EnvCapabilityArgs)
 	if len(capabilityArgsValue) > 0 {
@@ -82,6 +86,7 @@ func main() {
 		}
 	}
 
+	/*通过EnvCNIArgs，加载cniArgs*/
 	var cniArgs [][2]string
 	args := os.Getenv(EnvCNIArgs)
 	if len(args) > 0 {
@@ -91,11 +96,13 @@ func main() {
 		}
 	}
 
+	/*确定ifname*/
 	ifName, ok := os.LookupEnv(EnvCNIIfname)
 	if !ok {
 		ifName = "eth0"
 	}
 
+	/*确定netns路径*/
 	netns := os.Args[3]
 	netns, err = filepath.Abs(netns)
 	if err != nil {
@@ -104,11 +111,12 @@ func main() {
 
 	// Generate the containerid by hashing the netns path
 	s := sha512.Sum512([]byte(netns))
-	containerID := fmt.Sprintf("cnitool-%x", s[:10])
+	containerID := fmt.Sprintf("cnitool-%x", s[:10]) /*生成container-id*/
 
 	/*自EnvCNIPATH中获取plgin的查找路径，并构造CNIConfig对象*/
 	cninet := libcni.NewCNIConfig(filepath.SplitList(os.Getenv(EnvCNIPath)), nil)
 
+	/*利用以上参数，构造runtime conf*/
 	rt := &libcni.RuntimeConf{
 		ContainerID:    containerID,
 		NetNS:          netns,
@@ -136,6 +144,7 @@ func main() {
 }
 
 func usage() {
+	/*指明工具用法*/
 	exe := filepath.Base(os.Args[0])
 
 	fmt.Fprintf(os.Stderr, "%s: Add, check, or remove network interfaces from a network namespace\n", exe)

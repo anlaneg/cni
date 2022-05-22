@@ -38,11 +38,12 @@ func FindInPath(plugin string, paths []string) (string, error) {
 		return "", fmt.Errorf("no paths provided")
 	}
 
+	/*在paths数组中查找plugin，考虑可执行后缀，如果文件存在，返回全路径*/
 	for _, path := range paths {
-		/*在paths数组中查找plgin，如果找到返回全路径*/
-		for _, fe := range ExecutableFileExtensions {
+		for _, fe := range ExecutableFileExtensions/*可执行文件后缀*/ {
 			fullpath := filepath.Join(path, plugin) + fe
 			if fi, err := os.Stat(fullpath); err == nil && fi.Mode().IsRegular() {
+				/*此文件存在，则返回文件全路径*/
 				return fullpath, nil
 			}
 		}

@@ -24,12 +24,14 @@ type ResultFactoryFunc func([]byte) (types.Result, error)
 
 type creator struct {
 	// CNI Result spec versions that createFn can create a Result for
-	versions []string
+	versions []string /*一组版本*/
+	/*对应的createFn*/
 	createFn ResultFactoryFunc
 }
 
 var creators []*creator
 
+/*查找version对应的creator*/
 func findCreator(version string) *creator {
 	for _, c := range creators {
 		for _, v := range c.versions {
@@ -45,6 +47,7 @@ func findCreator(version string) *creator {
 // could not be performed
 func Create(version string, bytes []byte) (types.Result, error) {
 	if c := findCreator(version); c != nil {
+		/*通过此createFn创建*/
 		return c.createFn(bytes)
 	}
 	return nil, fmt.Errorf("unsupported CNI result version %q", version)
@@ -56,11 +59,12 @@ func RegisterCreator(versions []string, createFn ResultFactoryFunc) {
 	// Make sure there is no creator already registered for these versions
 	for _, v := range versions {
 		if findCreator(v) != nil {
+			/*此version对应的creator已注册*/
 			panic(fmt.Sprintf("creator already registered for %s", v))
 		}
 	}
 	creators = append(creators, &creator{
-		versions: versions,
-		createFn: createFn,
+		versions: versions,/*版本号*/
+		createFn: createFn,/*对应的createFn*/
 	})
 }

@@ -77,8 +77,10 @@ func LoadArgs(args string, container interface{}) error {
 
 	containerValue := reflect.ValueOf(container)
 
+	/*args由一组';'分隔的参数组成*/
 	pairs := strings.Split(args, ";")
 	unknownArgs := []string{}
+	/*遍历这些键值对，通过'='划分出key与value*/
 	for _, pair := range pairs {
 		kv := strings.Split(pair, "=")
 		if len(kv) != 2 {
@@ -86,9 +88,10 @@ func LoadArgs(args string, container interface{}) error {
 		}
 		keyString := kv[0]
 		valueString := kv[1]
-		/*自containerValue中提取keyString名称的field*/
+		/*自containerValue中提取名称为keyString的field*/
 		keyField := GetKeyField(keyString, containerValue)
 		if !keyField.IsValid() {
+			/*此field无效，记录入未知参数*/
 			unknownArgs = append(unknownArgs, pair)
 			continue
 		}

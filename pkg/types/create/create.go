@@ -28,19 +28,24 @@ func DecodeVersion(jsonBytes []byte) (string, error) {
 	var conf struct {
 		CNIVersion string `json:"cniVersion"`
 	}
+	/*解析conf中的cniVersion*/
 	err := json.Unmarshal(jsonBytes, &conf)
 	if err != nil {
 		return "", fmt.Errorf("decoding version from network config: %w", err)
 	}
 	if conf.CNIVersion == "" {
+		/*如未提供，认为0.1.0版本*/
 		return "0.1.0", nil
 	}
+	
+	/*否则返回指定版本*/
 	return conf.CNIVersion, nil
 }
 
 // Create creates a CNI Result using the given JSON with the expected
 // version, or an error if the creation could not be performed
 func Create(version string, bytes []byte) (types.Result, error) {
+	/*按版本返回对应的解析的结果*/
 	return convert.Create(version, bytes)
 }
 
@@ -48,9 +53,11 @@ func Create(version string, bytes []byte) (types.Result, error) {
 // detecting the CNI spec version of the result. An error is returned if the
 // operation could not be performed.
 func CreateFromBytes(bytes []byte) (types.Result, error) {
+	/*cni插件执行的结果是json串，解码其中指明的cniVersion*/
 	version, err := DecodeVersion(bytes)
 	if err != nil {
 		return nil, err
 	}
+	/*构造此version对应的返回值解析*/
 	return convert.Create(version, bytes)
 }
