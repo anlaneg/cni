@@ -17,17 +17,17 @@ package invoke_test
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
 
-	"github.com/containernetworking/cni/pkg/invoke"
-	current "github.com/containernetworking/cni/pkg/types/100"
-	"github.com/containernetworking/cni/plugins/test/noop/debug"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/containernetworking/cni/pkg/invoke"
+	current "github.com/containernetworking/cni/pkg/types/100"
+	"github.com/containernetworking/cni/pkg/version"
+	"github.com/containernetworking/cni/plugins/test/noop/debug"
 )
 
 var _ = Describe("Delegate", func() {
@@ -43,7 +43,7 @@ var _ = Describe("Delegate", func() {
 	BeforeEach(func() {
 		netConf, _ = json.Marshal(map[string]string{
 			"name":       "delegate-test",
-			"cniVersion": current.ImplementedSpecVersion,
+			"cniVersion": version.Current(),
 		})
 
 		expectedResult = &current.Result{
@@ -59,7 +59,7 @@ var _ = Describe("Delegate", func() {
 		}
 		expectedResultBytes, _ := json.Marshal(expectedResult)
 
-		debugFile, err := ioutil.TempFile("", "cni_debug")
+		debugFile, err := os.CreateTemp("", "cni_debug")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(debugFile.Close()).To(Succeed())
 		debugFileName = debugFile.Name()

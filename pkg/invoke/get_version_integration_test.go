@@ -16,17 +16,16 @@ package invoke_test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/cni/pkg/version/testhelpers"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("GetVersion, integration tests", func() {
@@ -36,7 +35,7 @@ var _ = Describe("GetVersion, integration tests", func() {
 	)
 
 	BeforeEach(func() {
-		pluginDir, err := ioutil.TempDir("", "plugins")
+		pluginDir, err := os.MkdirTemp("", "plugins")
 		Expect(err).NotTo(HaveOccurred())
 		pluginPath = filepath.Join(pluginDir, "test-plugin")
 		if runtime.GOOS == "windows" {
@@ -128,5 +127,7 @@ func c(_ *skel.CmdArgs) error { fmt.Println("{}"); return nil }
 func main() { skel.PluginMain(c, c) }
 `
 
-const git_ref_v010 = "2c482f4"
-const git_ref_v020_no_custom_versions = "349d66d"
+const (
+	git_ref_v010                    = "2c482f4"
+	git_ref_v020_no_custom_versions = "349d66d"
+)

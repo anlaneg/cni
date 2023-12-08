@@ -20,12 +20,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containernetworking/cni/pkg/types"
-	current "github.com/containernetworking/cni/pkg/types/100"
-	"github.com/containernetworking/cni/pkg/version"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/version"
 )
 
 type fakeCmd struct {
@@ -46,13 +45,14 @@ func (c *fakeCmd) Func(args *CmdArgs) error {
 
 var _ = Describe("dispatching to the correct callback", func() {
 	var (
-		environment              map[string]string
-		stdinData                string
-		stdout, stderr           *bytes.Buffer
-		cmdAdd, cmdCheck, cmdDel *fakeCmd
-		dispatch                 *dispatcher
-		expectedCmdArgs          *CmdArgs
-		versionInfo              version.PluginInfo
+		environment                     map[string]string
+		stdinData                       string
+		stdout, stderr                  *bytes.Buffer
+		cmdAdd, cmdCheck, cmdDel, cmdGC *fakeCmd
+		dispatch                        *dispatcher
+		expectedCmdArgs                 *CmdArgs
+		versionInfo                     version.PluginInfo
+		funcs                           CNIFuncs
 	)
 
 	BeforeEach(func() {
@@ -78,6 +78,14 @@ var _ = Describe("dispatching to the correct callback", func() {
 		cmdAdd = &fakeCmd{}
 		cmdCheck = &fakeCmd{}
 		cmdDel = &fakeCmd{}
+		cmdGC = &fakeCmd{}
+		funcs = CNIFuncs{
+			Add:   cmdAdd.Func,
+			Del:   cmdDel.Func,
+			Check: cmdCheck.Func,
+			GC:    cmdGC.Func,
+		}
+
 		expectedCmdArgs = &CmdArgs{
 			ContainerID: "some-container-id",
 			Netns:       "/some/netns/path",
@@ -88,10 +96,10 @@ var _ = Describe("dispatching to the correct callback", func() {
 		}
 	})
 
-	var envVarChecker = func(envVar string, isRequired bool) {
+	envVarChecker := func(envVar string, isRequired bool) {
 		delete(environment, envVar)
 
-		err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+		err := dispatch.pluginMain(funcs, versionInfo, "")
 		if isRequired {
 			Expect(err).To(Equal(&types.Error{
 				Code: types.ErrInvalidEnvironmentVariables,
@@ -103,8 +111,17 @@ var _ = Describe("dispatching to the correct callback", func() {
 	}
 
 	Context("when the CNI_COMMAND is ADD", func() {
+		expectedCmdArgs = &CmdArgs{
+			ContainerID: "some-container-id",
+			Netns:       "/some/netns/path",
+			IfName:      "eth0",
+			Args:        "some;extra;args",
+			Path:        "/some/cni/path",
+			StdinData:   []byte(stdinData),
+		}
+
 		It("extracts env vars and stdin data and calls cmdAdd", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(1))
@@ -115,7 +132,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		It("returns an error when containerID has invalid characters", func() {
 			environment["CNI_CONTAINERID"] = "some-%%container-id"
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(&types.Error{
 				Code:    types.ErrInvalidEnvironmentVariables,
@@ -128,7 +145,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name is too long", func() {
 				environment["CNI_IFNAME"] = "1234567890123456"
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -140,7 +157,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name is .", func() {
 				environment["CNI_IFNAME"] = "."
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -152,7 +169,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name is ..", func() {
 				environment["CNI_IFNAME"] = ".."
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -164,7 +181,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name contains invalid characters /", func() {
 				environment["CNI_IFNAME"] = "test/test"
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -176,7 +193,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name contains invalid characters :", func() {
 				environment["CNI_IFNAME"] = "test:test"
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -188,7 +205,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("interface name contains invalid characters whitespace", func() {
 				environment["CNI_IFNAME"] = "test test"
 
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(&types.Error{
 					Code:    types.ErrInvalidEnvironmentVariables,
@@ -199,7 +216,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("does not call cmdCheck or cmdDel", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdCheck.CallCount).To(Equal(0))
@@ -223,7 +240,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			})
 
 			It("reports that all of them are missing, not just the first", func() {
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 
 				Expect(err).To(Equal(&types.Error{
@@ -245,8 +262,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 				})
 
 				It("infers the config is 0.1.0 and calls the cmdAdd callback", func() {
-
-					err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+					err := dispatch.pluginMain(funcs, versionInfo, "")
 					Expect(err).NotTo(HaveOccurred())
 
 					Expect(cmdAdd.CallCount).To(Equal(1))
@@ -260,14 +276,15 @@ var _ = Describe("dispatching to the correct callback", func() {
 				})
 
 				It("immediately returns a useful error", func() {
-					err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-					Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/master/SPEC.md#well-known-error-codes
+					err := dispatch.pluginMain(funcs, versionInfo, "")
+					Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
 					Expect(err.Msg).To(Equal("incompatible CNI versions"))
 					Expect(err.Details).To(Equal(`config is "0.1.0", plugin supports ["4.3.2"]`))
 				})
 
 				It("does not call either callback", func() {
-					dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+					err := dispatch.pluginMain(funcs, versionInfo, "")
+					Expect(err).To(HaveOccurred())
 					Expect(cmdAdd.CallCount).To(Equal(0))
 					Expect(cmdCheck.CallCount).To(Equal(0))
 					Expect(cmdDel.CallCount).To(Equal(0))
@@ -282,7 +299,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("extracts env vars and stdin data and calls cmdCheck", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -292,7 +309,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("does not call cmdAdd or cmdDel", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -316,7 +333,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			})
 
 			It("reports that all of them are missing, not just the first", func() {
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 				Expect(err).To(HaveOccurred())
 
 				Expect(err).To(Equal(&types.Error{
@@ -329,8 +346,8 @@ var _ = Describe("dispatching to the correct callback", func() {
 		Context("when cniVersion is less than 0.4.0", func() {
 			It("immediately returns a useful error", func() {
 				dispatch.Stdin = strings.NewReader(`{ "name": "skel-test", "cniVersion": "0.3.0", "some": "config" }`)
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/master/SPEC.md#well-known-error-codes
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
 				Expect(err.Msg).To(Equal("config version does not allow CHECK"))
 				Expect(cmdAdd.CallCount).To(Equal(0))
 				Expect(cmdCheck.CallCount).To(Equal(0))
@@ -342,8 +359,8 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("immediately returns a useful error", func() {
 				dispatch.Stdin = strings.NewReader(`{ "name": "skel-test", "cniVersion": "0.4.0", "some": "config" }`)
 				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "0.3.0")
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/master/SPEC.md#well-known-error-codes
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
 				Expect(err.Msg).To(Equal("plugin version does not allow CHECK"))
 				Expect(cmdAdd.CallCount).To(Equal(0))
 				Expect(cmdCheck.CallCount).To(Equal(0))
@@ -355,8 +372,8 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("immediately returns a useful error", func() {
 				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "adsfsadf", "some": "config", "name": "test" }`)
 				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "0.3.0")
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-				Expect(err.Code).To(Equal(uint(types.ErrDecodingFailure)))
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrDecodingFailure))
 				Expect(cmdAdd.CallCount).To(Equal(0))
 				Expect(cmdCheck.CallCount).To(Equal(0))
 				Expect(cmdDel.CallCount).To(Equal(0))
@@ -367,8 +384,8 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("immediately returns invalid network config", func() {
 				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "0.4.0", "some": "config", "name": "te%%st" }`)
 				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "0.3.0", "0.4.0")
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-				Expect(err.Code).To(Equal(uint(types.ErrInvalidNetworkConfig)))
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrInvalidNetworkConfig))
 				Expect(cmdAdd.CallCount).To(Equal(0))
 				Expect(cmdCheck.CallCount).To(Equal(0))
 				Expect(cmdDel.CallCount).To(Equal(0))
@@ -379,11 +396,130 @@ var _ = Describe("dispatching to the correct callback", func() {
 			It("immediately returns a useful error", func() {
 				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "0.4.0", "some": "config", "name": "test" }`)
 				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "adsfasdf")
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-				Expect(err.Code).To(Equal(uint(types.ErrDecodingFailure)))
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrDecodingFailure))
 				Expect(cmdAdd.CallCount).To(Equal(0))
 				Expect(cmdCheck.CallCount).To(Equal(0))
 				Expect(cmdDel.CallCount).To(Equal(0))
+			})
+		})
+	})
+
+	Context("when the CNI_COMMAND is GC", func() {
+		BeforeEach(func() {
+			environment["CNI_COMMAND"] = "GC"
+			delete(environment, "CNI_NETNS")
+			delete(environment, "CNI_IFNAME")
+			delete(environment, "CNI_CONTAINERID")
+			delete(environment, "CNI_ARGS")
+
+			expectedCmdArgs = &CmdArgs{
+				Path:      "/some/cni/path",
+				StdinData: []byte(stdinData),
+			}
+
+			dispatch = &dispatcher{
+				Getenv: func(key string) string {
+					return environment[key]
+				},
+				Stdin:  strings.NewReader(stdinData),
+				Stdout: stdout,
+				Stderr: stderr,
+			}
+		})
+
+		It("extracts env vars and stdin data and calls cmdGC", func() {
+			err := dispatch.pluginMain(funcs, versionInfo, "")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdAdd.CallCount).To(Equal(0))
+			Expect(cmdCheck.CallCount).To(Equal(0))
+			Expect(cmdDel.CallCount).To(Equal(0))
+			Expect(cmdGC.CallCount).To(Equal(1))
+			Expect(cmdGC.Received.CmdArgs).To(Equal(expectedCmdArgs))
+		})
+
+		It("does not call cmdAdd or cmdDel", func() {
+			err := dispatch.pluginMain(funcs, versionInfo, "")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdAdd.CallCount).To(Equal(0))
+			Expect(cmdDel.CallCount).To(Equal(0))
+		})
+
+		DescribeTable("required / optional env vars", envVarChecker,
+			Entry("command", "CNI_COMMAND", true),
+			Entry("container id", "CNI_CONTAINERID", false),
+			Entry("net ns", "CNI_NETNS", false),
+			Entry("if name", "CNI_IFNAME", false),
+			Entry("args", "CNI_ARGS", false),
+			Entry("path", "CNI_PATH", true),
+		)
+
+		Context("when multiple required env vars are missing", func() {
+			BeforeEach(func() {
+				delete(environment, "CNI_PATH")
+			})
+
+			It("reports that all of them are missing, not just the first", func() {
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err).To(HaveOccurred())
+
+				Expect(err).To(Equal(&types.Error{
+					Code: types.ErrInvalidEnvironmentVariables,
+					Msg:  "required env variables [CNI_PATH] missing",
+				}))
+			})
+		})
+
+		Context("when cniVersion is less than 1.1.0", func() {
+			It("immediately returns a useful error", func() {
+				dispatch.Stdin = strings.NewReader(`{ "name": "skel-test", "cniVersion": "0.3.0", "some": "config" }`)
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
+				Expect(err.Msg).To(Equal("config version does not allow GC"))
+				Expect(cmdGC.CallCount).To(Equal(0))
+			})
+		})
+
+		Context("when plugin does not support 1.1.0", func() {
+			It("immediately returns a useful error", func() {
+				dispatch.Stdin = strings.NewReader(`{ "name": "skel-test", "cniVersion": "1.1.0", "some": "config" }`)
+				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "0.3.0")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrIncompatibleCNIVersion)) // see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
+				Expect(err.Msg).To(Equal("plugin version does not allow GC"))
+				Expect(cmdGC.CallCount).To(Equal(0))
+			})
+		})
+
+		Context("when the config has a bad version", func() {
+			It("immediately returns a useful error", func() {
+				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "adsfsadf", "some": "config", "name": "test" }`)
+				versionInfo = version.PluginSupports("1.1.0")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrDecodingFailure))
+				Expect(cmdGC.CallCount).To(Equal(0))
+			})
+		})
+
+		Context("when the config has a bad name", func() {
+			It("immediately returns invalid network config", func() {
+				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "0.4.0", "some": "config", "name": "te%%st" }`)
+				versionInfo = version.PluginSupports("1.1.0")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrInvalidNetworkConfig))
+				Expect(cmdGC.CallCount).To(Equal(0))
+			})
+		})
+
+		Context("when the plugin has a bad version", func() {
+			It("immediately returns a useful error", func() {
+				dispatch.Stdin = strings.NewReader(`{ "cniVersion": "1.1.0", "some": "config", "name": "test" }`)
+				versionInfo = version.PluginSupports("0.1.0", "0.2.0", "adsfasdf")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
+				Expect(err.Code).To(Equal(types.ErrDecodingFailure))
+				Expect(cmdGC.CallCount).To(Equal(0))
 			})
 		})
 	})
@@ -394,7 +530,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("calls cmdDel with the env vars and stdin data", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdDel.CallCount).To(Equal(1))
@@ -402,7 +538,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("does not call cmdAdd", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -424,17 +560,17 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("prints the version to stdout", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stdout).To(MatchJSON(fmt.Sprintf(`{
 				"cniVersion": "%s",
 				"supportedVersions": ["9.8.7", "10.0.0"]
-			}`, current.ImplementedSpecVersion)))
+			}`, version.Current())))
 		})
 
 		It("does not call cmdAdd or cmdDel", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -454,14 +590,14 @@ var _ = Describe("dispatching to the correct callback", func() {
 			r := &BadReader{}
 			dispatch.Stdin = r
 
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(r.ReadCount).To(Equal(0))
 			Expect(stdout).To(MatchJSON(fmt.Sprintf(`{
 				"cniVersion": "%s",
 				"supportedVersions": ["9.8.7", "10.0.0"]
-			}`, current.ImplementedSpecVersion)))
+			}`, version.Current())))
 		})
 	})
 
@@ -471,14 +607,14 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("does not call any cmd callback", func() {
-			dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-
+			err := dispatch.pluginMain(funcs, versionInfo, "")
+			Expect(err).To(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
 			Expect(cmdDel.CallCount).To(Equal(0))
 		})
 
 		It("returns an error", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).To(Equal(&types.Error{
 				Code: types.ErrInvalidEnvironmentVariables,
@@ -488,7 +624,8 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		It("prints the about string when the command is blank", func() {
 			environment["CNI_COMMAND"] = ""
-			dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "test framework v42")
+			err := dispatch.pluginMain(funcs, versionInfo, "test framework v42")
+			Expect(err).NotTo(HaveOccurred())
 			Expect(stderr.String()).To(ContainSubstring("test framework v42"))
 		})
 	})
@@ -496,7 +633,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 	Context("when the CNI_COMMAND is missing", func() {
 		It("prints the about string to stderr", func() {
 			environment = map[string]string{}
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "AWESOME PLUGIN")
+			err := dispatch.pluginMain(funcs, versionInfo, "AWESOME PLUGIN")
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -507,7 +644,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		It("fails if there is no about string", func() {
 			environment = map[string]string{}
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 			Expect(err).To(HaveOccurred())
 
 			Expect(cmdAdd.CallCount).To(Equal(0))
@@ -525,14 +662,14 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 
 		It("does not call any cmd callback", func() {
-			dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
-
+			err := dispatch.pluginMain(funcs, versionInfo, "")
+			Expect(err).To(HaveOccurred())
 			Expect(cmdAdd.CallCount).To(Equal(0))
 			Expect(cmdDel.CallCount).To(Equal(0))
 		})
 
 		It("wraps and returns the error", func() {
-			err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+			err := dispatch.pluginMain(funcs, versionInfo, "")
 
 			Expect(err).To(Equal(&types.Error{
 				Code: types.ErrIOFailure,
@@ -551,7 +688,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			})
 
 			It("returns the error as-is", func() {
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 
 				Expect(err).To(Equal(&types.Error{
 					Code: 1234,
@@ -566,7 +703,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			})
 
 			It("wraps and returns the error", func() {
-				err := dispatch.pluginMain(cmdAdd.Func, cmdCheck.Func, cmdDel.Func, versionInfo, "")
+				err := dispatch.pluginMain(funcs, versionInfo, "")
 
 				Expect(err).To(Equal(&types.Error{
 					Code: types.ErrInternal,

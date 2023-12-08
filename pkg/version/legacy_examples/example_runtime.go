@@ -16,7 +16,6 @@ package legacy_examples
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	noop_debug "github.com/containernetworking/cni/plugins/test/noop/debug"
@@ -108,7 +107,7 @@ func (e *ExampleRuntime) GenerateNetConf(name string) (*ExampleNetConf, error) {
 		return nil, fmt.Errorf("unknown example net config template %q", name)
 	}
 
-	debugFile, err := ioutil.TempFile("", "cni_debug")
+	debugFile, err := os.CreateTemp("", "cni_debug")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create noop plugin debug file: %w", err)
 	}
@@ -144,12 +143,12 @@ var V010_Runtime = ExampleRuntime{
 	NetConfs: []string{"unversioned", "0.1.0"},
 	Example: Example{
 		Name:          "example_invoker_v010",
-		CNIRepoGitRef: "c0d34c69", //version with ns.Do
+		CNIRepoGitRef: "c0d34c69", // version with ns.Do
 		PluginSource: `package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/containernetworking/cni/libcni"
@@ -161,7 +160,7 @@ func main(){
 }
 
 func exec() int {
-	confBytes, err := ioutil.ReadAll(os.Stdin)
+	confBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Printf("could not read netconfig from stdin: %+v", err)
 		return 1

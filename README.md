@@ -20,6 +20,14 @@ Here are the recordings of two sessions that the CNI maintainers hosted at KubeC
 - [Introduction to CNI](https://youtu.be/YjjrQiJOyME)
 - [CNI deep dive](https://youtu.be/zChkx-AB5Xc)
 
+
+## Contributing to CNI
+
+We welcome contributions, including [bug reports](https://github.com/containernetworking/cni/issues), and code and documentation improvements.
+If you intend to contribute to code or documentation, please read [CONTRIBUTING.md](CONTRIBUTING.md). Also see the [contact section](#contact) in this README.
+
+The CNI project has a [weekly meeting](https://meet.jit.si/CNIMaintainersMeeting). It takes place Mondays at 11:00 US/Eastern. All are welcome to join.
+
 ## Why develop CNI?
 
 Application containers on Linux are a rapidly evolving area, and within this area networking is not well addressed as it is highly environment-specific.
@@ -30,7 +38,7 @@ To avoid duplication, we think it is prudent to define a common interface betwee
 ## Who is using CNI?
 ### Container runtimes
 - [rkt - container engine](https://coreos.com/blog/rkt-cni-networking.html)
-- [Kubernetes - a system to simplify container operations](https://kubernetes.io/docs/admin/network-plugins/)
+- [Kubernetes - a system to simplify container operations](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/)
 - [OpenShift - Kubernetes with additional enterprise features](https://github.com/openshift/origin/blob/master/docs/openshift_networking_requirements.md)
 - [Cloud Foundry - a platform for cloud applications](https://github.com/cloudfoundry-incubator/cf-networking-release)
 - [Apache Mesos - a distributed systems kernel](https://github.com/apache/mesos/blob/master/docs/cni.md)
@@ -39,7 +47,7 @@ To avoid duplication, we think it is prudent to define a common interface betwee
 - [OpenSVC - orchestrator for legacy and containerized application stacks](https://docs.opensvc.com/latest/fr/agent.configure.cni.html)
 
 ### 3rd party plugins
-- [Project Calico - a layer 3 virtual network](https://github.com/projectcalico/calico-cni)
+- [Project Calico - a layer 3 virtual network](https://github.com/projectcalico/calico)
 - [Weave - a multi-host Docker network](https://github.com/weaveworks/weave)
 - [Contiv Networking - policy networking for various use cases](https://github.com/contiv/netplugin)
 - [SR-IOV](https://github.com/hustcat/sriov-cni)
@@ -66,16 +74,12 @@ To avoid duplication, we think it is prudent to define a common interface betwee
 - [Project Antrea - an Open vSwitch k8s CNI](https://github.com/vmware-tanzu/antrea)
 - [OVN4NFV-K8S-Plugin - a OVN based CNI controller plugin to provide cloud native based Service function chaining (SFC), Multiple OVN overlay networking](https://github.com/opnfv/ovn4nfv-k8s-plugin)
 - [Azure CNI - a CNI plugin that natively extends Azure Virtual Networks to containers](https://github.com/Azure/azure-container-networking)
-- [NetLOX Loxilight -  Loxilight CNI is based on TC eBPF. It works either as a pure eBPF mode or in a hybrid-mode with multi-vendor DPU support when DPU units are available](https://www.netlox.io/product)
 - [Hybridnet - a CNI plugin designed for hybrid clouds which provides both overlay and underlay networking for containers in one or more clusters. Overlay and underlay containers can run on the same node and have cluster-wide bidirectional network connectivity.](https://github.com/alibaba/hybridnet)
+- [Spiderpool - An IP Address Management (IPAM) CNI plugin of Kubernetes for managing static ip for underlay network](https://github.com/spidernet-io/spiderpool)
+- [AWS VPC CNI - Networking plugin for pod networking in Kubernetes using Elastic Network Interfaces on AWS](https://github.com/aws/amazon-vpc-cni-k8s)
 
 The CNI team also maintains some [core plugins in a separate repository](https://github.com/containernetworking/plugins).
 
-
-## Contributing to CNI
-
-We welcome contributions, including [bug reports](https://github.com/containernetworking/cni/issues), and code and documentation improvements.
-If you intend to contribute to code or documentation, please read [CONTRIBUTING.md](CONTRIBUTING.md). Also see the [contact section](#contact) in this README.
 
 ## How do I use CNI?
 

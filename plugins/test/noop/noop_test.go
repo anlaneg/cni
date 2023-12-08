@@ -16,18 +16,18 @@ package main_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gexec"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
 	noop_debug "github.com/containernetworking/cni/plugins/test/noop/debug"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("No-op plugin", func() {
@@ -46,7 +46,7 @@ var _ = Describe("No-op plugin", func() {
 			ReportVersionSupport: []string{"0.1.0", "0.2.0", "0.3.0", "0.3.1", "0.4.0"},
 		}
 
-		debugFile, err := ioutil.TempFile("", "cni_debug")
+		debugFile, err := os.CreateTemp("", "cni_debug")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(debugFile.Close()).To(Succeed())
 		debugFileName = debugFile.Name()
@@ -230,7 +230,7 @@ var _ = Describe("No-op plugin", func() {
 	})
 
 	Context("when the ReportResult debug field is set", func() {
-		var expectedResultString = fmt.Sprintf(` { "result": %q }`, noop_debug.EmptyReportResultMessage)
+		expectedResultString := fmt.Sprintf(` { "result": %q }`, noop_debug.EmptyReportResultMessage)
 
 		BeforeEach(func() {
 			debug.ReportResult = expectedResultString

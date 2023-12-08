@@ -125,15 +125,9 @@ func (d *DNS) Copy() *DNS {
 	}
 
 	to := &DNS{Domain: d.Domain}
-	for _, ns := range d.Nameservers {
-		to.Nameservers = append(to.Nameservers, ns)
-	}
-	for _, s := range d.Search {
-		to.Search = append(to.Search, s)
-	}
-	for _, o := range d.Options {
-		to.Options = append(to.Options, o)
-	}
+	to.Nameservers = append(to.Nameservers, d.Nameservers...)
+	to.Search = append(to.Search, d.Search...)
+	to.Options = append(to.Options, d.Options...)
 	return to
 }
 
@@ -158,7 +152,7 @@ func (r *Route) Copy() *Route {
 }
 
 // Well known error codes
-// see https://github.com/containernetworking/cni/blob/master/SPEC.md#well-known-error-codes
+// see https://github.com/containernetworking/cni/blob/main/SPEC.md#well-known-error-codes
 const (
 	ErrUnknown                     uint = iota // 0
 	ErrIncompatibleCNIVersion                  // 1
@@ -168,6 +162,7 @@ const (
 	ErrIOFailure                               // 5
 	ErrDecodingFailure                         // 6
 	ErrInvalidNetworkConfig                    // 7
+	ErrInvalidNetNS                            // 8
 	ErrTryAgainLater               uint = 11
 	ErrInternal                    uint = 999
 )

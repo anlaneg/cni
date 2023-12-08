@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -28,21 +27,23 @@ import (
 	"strings"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
+	"github.com/containernetworking/cni/pkg/version"
 	noop_debug "github.com/containernetworking/cni/plugins/test/noop/debug"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 type pluginInfo struct {
-	debugFilePath string
-	debug         *noop_debug.Debug
-	config        string
-	stdinData     []byte
+	debugFilePath   string
+	commandFilePath string
+	debug           *noop_debug.Debug
+	config          string
+	stdinData       []byte
 }
 
 type portMapping struct {
@@ -61,10 +62,15 @@ func stringInList(s string, list []string) bool {
 }
 
 func newPluginInfo(cniVersion, configValue, prevResult string, injectDebugFilePath bool, result string, runtimeConfig map[string]interface{}, capabilities []string) pluginInfo {
-	debugFile, err := ioutil.TempFile("", "cni_debug")
+	debugFile, err := os.CreateTemp("", "cni_debug")
 	Expect(err).NotTo(HaveOccurred())
 	Expect(debugFile.Close()).To(Succeed())
 	debugFilePath := debugFile.Name()
+
+	commandLog, err := os.CreateTemp("", "cni_debug")
+	Expect(err).NotTo(HaveOccurred())
+	Expect(commandLog.Close()).To(Succeed())
+	commandFilePath := commandLog.Name()
 
 	debug := &noop_debug.Debug{
 		ReportResult: result,
@@ -79,6 +85,7 @@ func newPluginInfo(cniVersion, configValue, prevResult string, injectDebugFilePa
 	}
 	if injectDebugFilePath {
 		config += fmt.Sprintf(`, "debugFile": %q`, debugFilePath)
+		config += fmt.Sprintf(`, "commandLog": %q`, commandFilePath)
 	}
 	if len(capabilities) > 0 {
 		config += `, "capabilities": {`
@@ -115,10 +122,11 @@ func newPluginInfo(cniVersion, configValue, prevResult string, injectDebugFilePa
 	Expect(err).NotTo(HaveOccurred())
 
 	return pluginInfo{
-		debugFilePath: debugFilePath,
-		debug:         debug,
-		config:        config,
-		stdinData:     stdinData,
+		debugFilePath:   debugFilePath,
+		commandFilePath: commandFilePath,
+		debug:           debug,
+		config:          config,
+		stdinData:       stdinData,
 	}
 }
 
@@ -153,7 +161,7 @@ var _ = Describe("Invoking plugins", func() {
 
 	BeforeEach(func() {
 		var err error
-		cacheDirPath, err = ioutil.TempDir("", "cni_cachedir")
+		cacheDirPath, err = os.MkdirTemp("", "cni_cachedir")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -173,14 +181,14 @@ var _ = Describe("Invoking plugins", func() {
 		)
 
 		BeforeEach(func() {
-			debugFile, err := ioutil.TempFile("", "cni_debug")
+			debugFile, err := os.CreateTemp("", "cni_debug")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(debugFile.Close()).To(Succeed())
 			debugFilePath = debugFile.Name()
 
 			debug = &noop_debug.Debug{
 				ReportResult: `{
-					"cniVersion": "1.0.0",
+					"cniVersion": "` + version.Current() + `",
 					"ips": [{"address": "10.1.2.3/24"}],
 					"dns": {}
 				}`,
@@ -196,7 +204,7 @@ var _ = Describe("Invoking plugins", func() {
 					"somethingElse": true,
 					"noCapability": false
 				}
-			}`, current.ImplementedSpecVersion))
+			}`, version.Current()))
 			netConfig, err = libcni.ConfFromBytes(pluginConfig)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -238,12 +246,12 @@ var _ = Describe("Invoking plugins", func() {
 			// We expect runtimeConfig keys only for portMappings and somethingElse
 			rawRc := conf["runtimeConfig"]
 			rc, ok := rawRc.(map[string]interface{})
-			Expect(ok).To(Equal(true))
+			Expect(ok).To(BeTrue())
 			expectedKeys := []string{"portMappings", "somethingElse"}
-			Expect(len(rc)).To(Equal(len(expectedKeys)))
+			Expect(rc).To(HaveLen(len(expectedKeys)))
 			for _, key := range expectedKeys {
 				_, ok := rc[key]
-				Expect(ok).To(Equal(true))
+				Expect(ok).To(BeTrue())
 			}
 		})
 
@@ -279,7 +287,6 @@ var _ = Describe("Invoking plugins", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(caps).To(ConsistOf("portMappings", "somethingElse"))
 		})
-
 	})
 
 	Describe("Invoking a single plugin", func() {
@@ -296,14 +303,14 @@ var _ = Describe("Invoking plugins", func() {
 		)
 
 		BeforeEach(func() {
-			debugFile, err := ioutil.TempFile("", "cni_debug")
+			debugFile, err := os.CreateTemp("", "cni_debug")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(debugFile.Close()).To(Succeed())
 			debugFilePath = debugFile.Name()
 
 			debug = &noop_debug.Debug{
 				ReportResult: `{
-					"cniVersion": "1.0.0",
+					"cniVersion": "` + version.Current() + `",
 					"ips": [{"address": "10.1.2.3/24"}],
 					"dns": {}
 				}`,
@@ -321,7 +328,7 @@ var _ = Describe("Invoking plugins", func() {
 				"some-key": "some-value",
 				"cniVersion": "%s",
 				"capabilities": { "portMappings": true }
-			}`, current.ImplementedSpecVersion)
+			}`, version.Current())
 			cniConfig = libcni.NewCNIConfigWithCacheDir([]string{cniBinPath}, cacheDirPath, nil)
 			netConfig, err = libcni.ConfFromBytes([]byte(pluginConfig))
 			Expect(err).NotTo(HaveOccurred())
@@ -411,6 +418,27 @@ var _ = Describe("Invoking plugins", func() {
 				returnedJson, err := json.Marshal(result)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(cachedJson).To(MatchJSON(returnedJson))
+
+				// Ensure the cached attachments matches requested one
+				for _, containerID := range []string{"", runtimeConfig.ContainerID} {
+					expected, err := json.Marshal(libcni.NetworkAttachment{
+						ContainerID:    runtimeConfig.ContainerID,
+						Network:        netConfig.Network.Name,
+						NetNS:          runtimeConfig.NetNS,
+						IfName:         runtimeConfig.IfName,
+						Config:         netConfig.Bytes,
+						CniArgs:        runtimeConfig.Args,
+						CapabilityArgs: runtimeConfig.CapabilityArgs,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					attachments, err := cniConfig.GetCachedAttachments(containerID)
+					Expect(err).NotTo(HaveOccurred())
+					if Expect(len(attachments)).To(Equal(1)) {
+						json, err := json.Marshal(attachments[0])
+						Expect(err).NotTo(HaveOccurred())
+						Expect(json).To(MatchJSON(expected))
+					}
+				}
 			})
 
 			Context("when finding the plugin fails", func() {
@@ -441,7 +469,7 @@ var _ = Describe("Invoking plugins", func() {
 					// Make the results directory inaccessible by making it a
 					// file instead of a directory
 					tmpPath := filepath.Join(cacheDirPath, "results")
-					err := ioutil.WriteFile(tmpPath, []byte("afdsasdfasdf"), 0600)
+					err := os.WriteFile(tmpPath, []byte("afdsasdfasdf"), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					result, err := cniConfig.AddNetwork(ctx, netConfig, runtimeConfig)
@@ -454,14 +482,14 @@ var _ = Describe("Invoking plugins", func() {
 		Describe("CheckNetwork", func() {
 			It("executes the plugin with command CHECK", func() {
 				cacheFile := resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-				err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+				err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 				Expect(err).NotTo(HaveOccurred())
 				cachedJson := `{
-					"cniVersion": "1.0.0",
+					"cniVersion": "` + version.Current() + `",
 					"ips": [{"address": "10.1.2.3/24"}],
 					"dns": {}
 				}`
-				err = ioutil.WriteFile(cacheFile, []byte(cachedJson), 0600)
+				err = os.WriteFile(cacheFile, []byte(cachedJson), 0o600)
 				Expect(err).NotTo(HaveOccurred())
 
 				err = cniConfig.CheckNetwork(ctx, netConfig, runtimeConfig)
@@ -516,7 +544,7 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -541,11 +569,11 @@ var _ = Describe("Invoking plugins", func() {
 
 				Context("containing only a cached result", func() {
 					It("only passes a prevResult to the plugin", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
-							"cniVersion": "1.0.0",
+						err := os.WriteFile(cacheFile, []byte(`{
+							"cniVersion": "`+version.Current()+`",
 							"ips": [{"address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.CheckNetwork(ctx, netConfig, runtimeConfig)
@@ -579,7 +607,7 @@ var _ = Describe("Invoking plugins", func() {
 						}`))
 						Expect(err).NotTo(HaveOccurred())
 
-						err = ioutil.WriteFile(cacheFile, []byte(ipResult), 0600)
+						err = os.WriteFile(cacheFile, []byte(ipResult), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						debug.ReportResult = ipResult
@@ -599,13 +627,13 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				Context("is invalid JSON", func() {
 					It("returns an error", func() {
-						err := ioutil.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0600)
+						err := os.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.CheckNetwork(ctx, netConfig, runtimeConfig)
@@ -615,11 +643,11 @@ var _ = Describe("Invoking plugins", func() {
 
 				Context("version doesn't match the config version", func() {
 					It("succeeds when the cached result can be converted", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.3.1",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.CheckNetwork(ctx, netConfig, runtimeConfig)
@@ -627,11 +655,11 @@ var _ = Describe("Invoking plugins", func() {
 					})
 
 					It("returns an error when the cached result cannot be converted", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.4567.0",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.CheckNetwork(ctx, netConfig, runtimeConfig)
@@ -644,14 +672,14 @@ var _ = Describe("Invoking plugins", func() {
 		Describe("DelNetwork", func() {
 			It("executes the plugin with command DEL", func() {
 				cacheFile := resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-				err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+				err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 				Expect(err).NotTo(HaveOccurred())
 				cachedJson := `{
-					"cniVersion": "1.0.0",
+					"cniVersion": "` + version.Current() + `",
 					"ips": [{"address": "10.1.2.3/24"}],
 					"dns": {}
 				}`
-				err = ioutil.WriteFile(cacheFile, []byte(cachedJson), 0600)
+				err = os.WriteFile(cacheFile, []byte(cachedJson), 0o600)
 				Expect(err).NotTo(HaveOccurred())
 
 				err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -688,6 +716,13 @@ var _ = Describe("Invoking plugins", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(cachedConfig).To(BeNil())
 				Expect(newRt).To(BeNil())
+
+				// Ensure the cached attachments no longer exist
+				for _, containerID := range []string{"", runtimeConfig.ContainerID} {
+					attachments, err := cniConfig.GetCachedAttachments(containerID)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(attachments).To(BeEmpty())
+				}
 			})
 
 			Context("when finding the plugin fails", func() {
@@ -717,21 +752,21 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					resultCacheFile = resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("deletes the cached result and config after the first DEL", func() {
-					err := ioutil.WriteFile(resultCacheFile, []byte(`{
+					err := os.WriteFile(resultCacheFile, []byte(`{
 						"cniVersion": "0.4.0",
 						"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 						"dns": {}
-					}`), 0600)
+					}`), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
 					Expect(err).NotTo(HaveOccurred())
-					_, err = ioutil.ReadFile(resultCacheFile)
+					_, err = os.ReadFile(resultCacheFile)
 					Expect(err).To(HaveOccurred())
 
 					err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -744,17 +779,17 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				Context("less than 0.4.0", func() {
 					It("does not pass a prevResult to the plugin", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.3.1",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						// Generate plugin config with older version
@@ -776,11 +811,11 @@ var _ = Describe("Invoking plugins", func() {
 
 				Context("equal to 0.4.0", func() {
 					It("passes a prevResult to the plugin", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.4.0",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -799,13 +834,13 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				Context("result is invalid JSON", func() {
 					It("returns an error", func() {
-						err := ioutil.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0600)
+						err := os.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -815,11 +850,11 @@ var _ = Describe("Invoking plugins", func() {
 
 				Context("result version doesn't match the config version", func() {
 					It("succeeds when the cached result can be converted", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.3.1",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -827,11 +862,11 @@ var _ = Describe("Invoking plugins", func() {
 					})
 
 					It("returns an error when the cached result cannot be converted", func() {
-						err := ioutil.WriteFile(cacheFile, []byte(`{
+						err := os.WriteFile(cacheFile, []byte(`{
 							"cniVersion": "0.4567.0",
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
-						}`), 0600)
+						}`), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						err = cniConfig.DelNetwork(ctx, netConfig, runtimeConfig)
@@ -848,7 +883,7 @@ var _ = Describe("Invoking plugins", func() {
 
 				Expect(versionInfo).NotTo(BeNil())
 				Expect(versionInfo.SupportedVersions()).To(Equal([]string{
-					"0.-42.0", "0.1.0", "0.2.0", "0.3.0", "0.3.1", "0.4.0", "1.0.0",
+					"0.-42.0", "0.1.0", "0.2.0", "0.3.0", "0.3.1", "0.4.0", "1.0.0", "1.1.0",
 				}))
 			})
 
@@ -936,8 +971,8 @@ var _ = Describe("Invoking plugins", func() {
 				"otherCapability": capabilityArgs["otherCapability"],
 			}
 
-			ipResult = fmt.Sprintf(`{"cniVersion": "%s", "dns":{},"ips":[{"address": "10.1.2.3/24"}]}`, current.ImplementedSpecVersion)
-			netConfigList, plugins = makePluginList(current.ImplementedSpecVersion, ipResult, rcMap)
+			ipResult = fmt.Sprintf(`{"cniVersion": "%s", "dns":{},"ips":[{"address": "10.1.2.3/24"}]}`, version.Current())
+			netConfigList, plugins = makePluginList(version.Current(), ipResult, rcMap)
 
 			ctx = context.TODO()
 		})
@@ -1163,7 +1198,7 @@ var _ = Describe("Invoking plugins", func() {
 				})
 				It("should not have written cache files", func() {
 					resultCacheFile := resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-					_, err := ioutil.ReadFile(resultCacheFile)
+					_, err := os.ReadFile(resultCacheFile)
 					Expect(err).To(HaveOccurred())
 				})
 			})
@@ -1173,7 +1208,7 @@ var _ = Describe("Invoking plugins", func() {
 					// Make the results directory inaccessible by making it a
 					// file instead of a directory
 					tmpPath := filepath.Join(cacheDirPath, "results")
-					err := ioutil.WriteFile(tmpPath, []byte("afdsasdfasdf"), 0600)
+					err := os.WriteFile(tmpPath, []byte("afdsasdfasdf"), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					result, err := cniConfig.AddNetworkList(ctx, netConfigList, runtimeConfig)
@@ -1186,9 +1221,9 @@ var _ = Describe("Invoking plugins", func() {
 		Describe("CheckNetworkList", func() {
 			It("executes all plugins with command CHECK", func() {
 				cacheFile := resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-				err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+				err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 				Expect(err).NotTo(HaveOccurred())
-				err = ioutil.WriteFile(cacheFile, []byte(ipResult), 0600)
+				err = os.WriteFile(cacheFile, []byte(ipResult), 0o600)
 				Expect(err).NotTo(HaveOccurred())
 
 				err = cniConfig.CheckNetworkList(ctx, netConfigList, runtimeConfig)
@@ -1230,7 +1265,7 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -1241,7 +1276,7 @@ var _ = Describe("Invoking plugins", func() {
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
 						}`
-						err := ioutil.WriteFile(cacheFile, []byte(ipResult), 0600)
+						err := os.WriteFile(cacheFile, []byte(ipResult), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						netConfigList, plugins = makePluginList("0.4.0", ipResult, rcMap)
@@ -1280,6 +1315,7 @@ var _ = Describe("Invoking plugins", func() {
 						Expect(err).NotTo(HaveOccurred())
 						err = cniConfig.CheckNetworkList(ctx, netConfigList, runtimeConfig)
 						Expect(err).To(MatchError("configuration version \"0.3.1\" does not support the CHECK command"))
+						Expect(errors.Is(err, libcni.ErrorCheckNotSupp)).To(BeTrue())
 					})
 				})
 			})
@@ -1309,9 +1345,9 @@ var _ = Describe("Invoking plugins", func() {
 			Context("when the cached result is invalid", func() {
 				It("returns an error", func() {
 					cacheFile := resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
-					err = ioutil.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0600)
+					err = os.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					err = cniConfig.CheckNetworkList(ctx, netConfigList, runtimeConfig)
@@ -1353,7 +1389,7 @@ var _ = Describe("Invoking plugins", func() {
 
 				BeforeEach(func() {
 					cacheFile = resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -1364,7 +1400,7 @@ var _ = Describe("Invoking plugins", func() {
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
 						}`
-						err := ioutil.WriteFile(cacheFile, []byte(ipResult), 0600)
+						err := os.WriteFile(cacheFile, []byte(ipResult), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						netConfigList, plugins = makePluginList("0.4.0", ipResult, rcMap)
@@ -1396,7 +1432,7 @@ var _ = Describe("Invoking plugins", func() {
 							"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 							"dns": {}
 						}`
-						err := ioutil.WriteFile(cacheFile, []byte(ipResult), 0600)
+						err := os.WriteFile(cacheFile, []byte(ipResult), 0o600)
 						Expect(err).NotTo(HaveOccurred())
 
 						netConfigList, plugins = makePluginList("0.3.1", ipResult, rcMap)
@@ -1442,9 +1478,9 @@ var _ = Describe("Invoking plugins", func() {
 			Context("when the cached result is invalid", func() {
 				It("returns an error", func() {
 					cacheFile := resultCacheFilePath(cacheDirPath, netConfigList.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(cacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(cacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
-					err = ioutil.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0600)
+					err = os.WriteFile(cacheFile, []byte("adfadsfasdfasfdsafaf"), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					err = cniConfig.DelNetworkList(ctx, netConfigList, runtimeConfig)
@@ -1471,6 +1507,117 @@ var _ = Describe("Invoking plugins", func() {
 				Expect(err).To(MatchError("[plugin noop does not support config version \"broken\" plugin noop does not support config version \"broken\" plugin noop does not support config version \"broken\"]"))
 			})
 		})
+		Describe("GCNetworkList", func() {
+			It("issues a DEL and GC as necessary", func() {
+				By("doing a CNI ADD")
+				_, err := cniConfig.AddNetworkList(ctx, netConfigList, runtimeConfig)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Issuing a GC with valid networks")
+				gcargs := &libcni.GCArgs{
+					ValidAttachments: []libcni.GCAttachment{{
+						ContainerID: runtimeConfig.ContainerID,
+						IfName:      runtimeConfig.IfName,
+					}},
+				}
+				err = cniConfig.GCNetworkList(ctx, netConfigList, gcargs)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Issuing a GC with no valid networks")
+				gcargs.ValidAttachments = nil
+				err = cniConfig.GCNetworkList(ctx, netConfigList, gcargs)
+				Expect(err).NotTo(HaveOccurred())
+
+				commands, err := noop_debug.ReadCommandLog(plugins[0].commandFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(commands).To(HaveLen(4))
+
+				validations := []struct {
+					name string
+					fn   func(entry noop_debug.CmdLogEntry)
+				}{
+					{
+						name: "ADD",
+						fn: func(entry noop_debug.CmdLogEntry) {
+							Expect(entry.CmdArgs.ContainerID).To(Equal(runtimeConfig.ContainerID))
+							Expect(entry.CmdArgs.IfName).To(Equal(runtimeConfig.IfName))
+						},
+					},
+					{
+						name: "GC",
+						fn: func(entry noop_debug.CmdLogEntry) {
+							var conf struct {
+								Attachments []map[string]string `json:"cni.dev/valid-attachments"`
+							}
+							err = json.Unmarshal(entry.CmdArgs.StdinData, &conf)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(conf.Attachments).To(HaveLen(1))
+							Expect(conf.Attachments[0]).To(Equal(map[string]string{"containerID": runtimeConfig.ContainerID, "ifname": runtimeConfig.IfName}))
+						},
+					},
+					{
+						name: "DEL",
+						fn: func(entry noop_debug.CmdLogEntry) {
+							Expect(entry.CmdArgs.ContainerID).To(Equal(runtimeConfig.ContainerID))
+							Expect(entry.CmdArgs.IfName).To(Equal(runtimeConfig.IfName))
+						},
+					},
+					{
+						name: "GC",
+						fn: func(entry noop_debug.CmdLogEntry) {
+							var conf struct {
+								Attachments []map[string]string `json:"cni.dev/valid-attachments"`
+							}
+							err = json.Unmarshal(entry.CmdArgs.StdinData, &conf)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(conf.Attachments).To(BeEmpty())
+						},
+					},
+				}
+				for i, c := range validations {
+					Expect(commands[i].Command).To(Equal(c.name))
+					c.fn(commands[i])
+				}
+			})
+		})
+		Describe("GetStatusNetworkList", func() {
+			It("issues a STATUS request", func() {
+				netConfigList, plugins = makePluginList("1.1.0", ipResult, rcMap)
+
+				err := cniConfig.GetStatusNetworkList(ctx, netConfigList)
+				Expect(err).NotTo(HaveOccurred())
+
+				debug, err := noop_debug.ReadDebug(plugins[0].debugFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(debug.Command).To(Equal("STATUS"))
+			})
+
+			It("correctly reports an error", func() {
+				netConfigList, plugins = makePluginList("1.1.0", ipResult, rcMap)
+
+				plugins[1].debug.ReportError = "plugin error: banana"
+				plugins[1].debug.ReportErrorCode = 50
+				Expect(plugins[1].debug.WriteDebug(plugins[1].debugFilePath)).To(Succeed())
+
+				err := cniConfig.GetStatusNetworkList(ctx, netConfigList)
+				Expect(err).To(HaveOccurred())
+				var eerr *types.Error
+				Expect(errors.As(err, &eerr)).To(BeTrue())
+				Expect(eerr.Code).To(Equal(uint(50)))
+
+				debug, err := noop_debug.ReadDebug(plugins[0].debugFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(debug.Command).To(Equal("STATUS"))
+
+				debug, err = noop_debug.ReadDebug(plugins[1].debugFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(debug.Command).To(Equal("STATUS"))
+
+				debug, err = noop_debug.ReadDebug(plugins[2].debugFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(debug.Command).To(Equal(""))
+			})
+		})
 	})
 
 	Describe("Invoking a sleep plugin", func() {
@@ -1486,7 +1633,7 @@ var _ = Describe("Invoking plugins", func() {
 		)
 
 		BeforeEach(func() {
-			debugFile, err := ioutil.TempFile("", "cni_debug")
+			debugFile, err := os.CreateTemp("", "cni_debug")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(debugFile.Close()).To(Succeed())
 			debugFilePath = debugFile.Name()
@@ -1506,7 +1653,7 @@ var _ = Describe("Invoking plugins", func() {
 				"some-key": "some-value",
 				"cniVersion": "%s",
 				"capabilities": { "portMappings": true }
-			}`, current.ImplementedSpecVersion)
+			}`, version.Current())
 
 			cniBinPath = filepath.Dir(pluginPaths["sleep"])
 			cniConfig = libcni.NewCNIConfig([]string{cniBinPath}, nil)
@@ -1533,11 +1680,10 @@ var _ = Describe("Invoking plugins", func() {
   "plugins": [
     %s
   ]
-}`, current.ImplementedSpecVersion, pluginConfig))
+}`, version.Current(), pluginConfig))
 
 			netConfigList, err = libcni.ConfListFromBytes(configList)
 			Expect(err).NotTo(HaveOccurred())
-
 		})
 
 		AfterEach(func() {
@@ -1553,7 +1699,6 @@ var _ = Describe("Invoking plugins", func() {
 					Expect(result).To(BeNil())
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1565,7 +1710,6 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1577,7 +1721,6 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1590,7 +1733,6 @@ var _ = Describe("Invoking plugins", func() {
 					Expect(result).To(BeNil())
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1602,7 +1744,6 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1615,7 +1756,6 @@ var _ = Describe("Invoking plugins", func() {
 					Expect(result).To(BeNil())
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1627,7 +1767,6 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1639,7 +1778,6 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
 
@@ -1651,10 +1789,8 @@ var _ = Describe("Invoking plugins", func() {
 					cancel()
 					Expect(err).To(MatchError(ContainSubstring("netplugin failed with no error message")))
 				})
-
 			})
 		})
-
 	})
 
 	Describe("Cache operations", func() {
@@ -1678,7 +1814,7 @@ var _ = Describe("Invoking plugins", func() {
 		netNS := "/some/netns/path"
 
 		BeforeEach(func() {
-			debugFile, err := ioutil.TempFile("", "cni_debug")
+			debugFile, err := os.CreateTemp("", "cni_debug")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(debugFile.Close()).To(Succeed())
 			debugFilePath = debugFile.Name()
@@ -1687,7 +1823,7 @@ var _ = Describe("Invoking plugins", func() {
 				ReportResult: fmt.Sprintf(`{
 					"cniVersion": "%s",
 					"ips": [{"version": "4", "address": "%s"}]
-				}`, current.ImplementedSpecVersion, firstIP),
+				}`, version.Current(), firstIP),
 			}
 			Expect(debug.WriteDebug(debugFilePath)).To(Succeed())
 
@@ -1696,7 +1832,7 @@ var _ = Describe("Invoking plugins", func() {
 				"type": "noop",
 				"name": "%s",
 				"cniVersion": "%s"
-			}`, netName, current.ImplementedSpecVersion)
+			}`, netName, version.Current())
 			cniConfig = libcni.NewCNIConfigWithCacheDir([]string{cniBinPath}, cacheDirPath, nil)
 			netConfig, err = libcni.ConfFromBytes([]byte(pluginConfig))
 			Expect(err).NotTo(HaveOccurred())
@@ -1720,16 +1856,16 @@ var _ = Describe("Invoking plugins", func() {
 			debug.ReportResult = fmt.Sprintf(`{
 				"cniVersion": "%s",
 				"ips": [{"version": "4", "address": "%s"}]
-			}`, current.ImplementedSpecVersion, secondIP)
+			}`, version.Current(), secondIP)
 			Expect(debug.WriteDebug(debugFilePath)).To(Succeed())
 			runtimeConfig.IfName = secondIfname
 			_, err = cniConfig.AddNetwork(ctx, netConfig, runtimeConfig)
 			Expect(err).NotTo(HaveOccurred())
 
 			resultsDir := filepath.Join(cacheDirPath, "results")
-			files, err := ioutil.ReadDir(resultsDir)
+			files, err := os.ReadDir(resultsDir)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(files)).To(Equal(2))
+			Expect(files).To(HaveLen(2))
 			var foundFirst, foundSecond bool
 			for _, f := range files {
 				type cachedConfig struct {
@@ -1739,7 +1875,7 @@ var _ = Describe("Invoking plugins", func() {
 					NetworkName string `json:"networkName"`
 				}
 
-				data, err := ioutil.ReadFile(filepath.Join(resultsDir, f.Name()))
+				data, err := os.ReadFile(filepath.Join(resultsDir, f.Name()))
 				Expect(err).NotTo(HaveOccurred())
 				cc := &cachedConfig{}
 				err = json.Unmarshal(data, cc)
@@ -1849,10 +1985,10 @@ var _ = Describe("Invoking plugins", func() {
 			Context("is invalid JSON", func() {
 				It("returns an error", func() {
 					resultCacheFile := resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 
-					err = ioutil.WriteFile(resultCacheFile, []byte("adfadsfasdfasfdsafaf"), 0600)
+					err = os.WriteFile(resultCacheFile, []byte("adfadsfasdfasfdsafaf"), 0o600)
 					Expect(err).NotTo(HaveOccurred())
 
 					cachedConfig, newRt, err := cniConfig.GetNetworkCachedConfig(netConfig, runtimeConfig)
@@ -1864,7 +2000,7 @@ var _ = Describe("Invoking plugins", func() {
 			Context("is missing", func() {
 				It("returns no error", func() {
 					resultCacheFile := resultCacheFilePath(cacheDirPath, netConfig.Network.Name, runtimeConfig)
-					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0700)
+					err := os.MkdirAll(filepath.Dir(resultCacheFile), 0o700)
 					Expect(err).NotTo(HaveOccurred())
 
 					cachedConfig, newRt, err := cniConfig.GetNetworkCachedConfig(netConfig, runtimeConfig)
@@ -1874,6 +2010,5 @@ var _ = Describe("Invoking plugins", func() {
 				})
 			})
 		})
-
 	})
 })

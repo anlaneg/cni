@@ -22,14 +22,11 @@ package testhelpers
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
-
-const packageBaseName = "github.com/containernetworking/cni"
 
 func run(cmd *exec.Cmd) error {
 	out, err := cmd.CombinedOutput()
@@ -64,8 +61,16 @@ func modInit(path, name string) error {
 	return run(cmd)
 }
 
+// addLibcni will execute `go mod edit -replace` to fix libcni at a specified version
 func addLibcni(path, gitRef string) error {
-	cmd := exec.Command("go", "get", "github.com/containernetworking/cni@"+gitRef)
+	cmd := exec.Command("go", "mod", "edit", "-replace=github.com/containernetworking/cni=github.com/containernetworking/cni@"+gitRef)
+	cmd.Dir = path
+	return run(cmd)
+}
+
+// modTidy will execute `go mod tidy` to ensure all necessary dependencies
+func modTidy(path string) error {
+	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = path
 	return run(cmd)
 }
@@ -73,7 +78,7 @@ func addLibcni(path, gitRef string) error {
 // BuildAt builds the go programSource using the version of the CNI library
 // at gitRef, and saves the resulting binary file at outputFilePath
 func BuildAt(programSource []byte, gitRef string, outputFilePath string) error {
-	tempDir, err := ioutil.TempDir(os.Getenv("GOTMPDIR"), "cni-test-")
+	tempDir, err := os.MkdirTemp(os.Getenv("GOTMPDIR"), "cni-test-")
 	if err != nil {
 		return err
 	}
@@ -85,12 +90,15 @@ func BuildAt(programSource []byte, gitRef string, outputFilePath string) error {
 		return err
 	}
 
-	// go get
 	if err := addLibcni(tempDir, gitRef); err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(tempDir, "main.go"), programSource, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, "main.go"), programSource, 0o600); err != nil {
+		return err
+	}
+
+	if err := modTidy(tempDir); err != nil {
 		return err
 	}
 

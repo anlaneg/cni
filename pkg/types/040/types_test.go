@@ -16,16 +16,16 @@ package types040_test
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
 	types040 "github.com/containernetworking/cni/pkg/types/040"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 func testResult() *types040.Result {
@@ -99,7 +99,7 @@ var _ = Describe("040 types operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// parse the result
-		out, err := ioutil.ReadAll(r)
+		out, err := io.ReadAll(r)
 		os.Stdout = oldStdout
 		Expect(err).NotTo(HaveOccurred())
 
@@ -169,7 +169,7 @@ var _ = Describe("040 types operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// parse the result
-		out, err := ioutil.ReadAll(r)
+		out, err := io.ReadAll(r)
 		os.Stdout = oldStdout
 		Expect(err).NotTo(HaveOccurred())
 

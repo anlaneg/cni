@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,7 +14,6 @@
 package testhelpers
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,7 +42,7 @@ func main() { skel.PluginMain(c, c) }
 		gitRef = "f4364185253"
 
 		var err error
-		outputDir, err = ioutil.TempDir("", "bin")
+		outputDir, err = os.MkdirTemp("", "bin")
 		Expect(err).NotTo(HaveOccurred())
 		outputFilePath = filepath.Join(outputDir, "some-binary")
 		if runtime.GOOS == "windows" {

@@ -16,11 +16,12 @@ package libcni
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/containernetworking/cni/pkg/types"
 )
@@ -58,7 +59,7 @@ func ConfFromBytes(bytes []byte) (*NetworkConfig, error) {
 
 /*读取文件filename,返回NetworkConfig*/
 func ConfFromFile(filename string) (*NetworkConfig, error) {
-	bytes, err := ioutil.ReadFile(filename)
+	bytes, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s: %w", filename, err)
 	}
@@ -98,7 +99,18 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 	if rawDisableCheck, ok := rawList["disableCheck"]; ok {
 		disableCheck, ok = rawDisableCheck.(bool)
 		if !ok {
-			return nil, fmt.Errorf("error parsing configuration list: invalid disableCheck type %T", rawDisableCheck)
+			disableCheckStr, ok := rawDisableCheck.(string)
+			if !ok {
+				return nil, fmt.Errorf("error parsing configuration list: invalid disableCheck type %T", rawDisableCheck)
+			}
+			switch {
+			case strings.ToLower(disableCheckStr) == "false":
+				disableCheck = false
+			case strings.ToLower(disableCheckStr) == "true":
+				disableCheck = true
+			default:
+				return nil, fmt.Errorf("error parsing configuration list: invalid disableCheck value %q", disableCheckStr)
+			}
 		}
 	}
 
@@ -144,7 +156,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 
 /*加载并解析配置文件到NetWorkConfigList*/
 func ConfListFromFile(filename string) (*NetworkConfigList, error) {
-	bytes, err := ioutil.ReadFile(filename)
+	bytes, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s: %w", filename, err)
 	}
@@ -155,7 +167,7 @@ func ConfListFromFile(filename string) (*NetworkConfigList, error) {
 func ConfFiles(dir string/*目录名称*/, extensions []string/*要查找的文件后缀*/) ([]string, error) {
 	// In part, adapted from rkt/networking/podenv.go#listFiles
 	/*收集dir目录下所有文件*/
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	switch {
 	case err == nil: // break
 	case os.IsNotExist(err):
@@ -237,7 +249,8 @@ func LoadConfList(dir, name string) (*NetworkConfigList, error) {
 	singleConf, err := LoadConf(dir, name)
 	if err != nil {
 		// A little extra logic so the error makes sense
-		if _, ok := err.(NoConfigsFoundError); len(files) != 0 && ok {
+		var ncfErr NoConfigsFoundError
+		if len(files) != 0 && errors.As(err, &ncfErr) {
 			// Config lists found but no config files found
 			return nil, NotFoundError{dir, name}
 		}

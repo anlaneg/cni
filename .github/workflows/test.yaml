@@ -4,19 +4,36 @@ name: test
 on: ["push", "pull_request"]
 
 env:
-  GO_VERSION: "1.16"
+  GO_VERSION: "1.19"
   LINUX_ARCHES: "amd64 386 arm arm64 s390x mips64le ppc64le"
 
 jobs:
-  build:
-    name: Build all linux architectures
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: setup go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      - uses: ibiqlik/action-yamllint@v3
+        with:
+          format: auto
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          args: --verbose
+          version: v1.51.2
+  build:
+    name: Build all linux architectures
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: setup go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/checkout@v4
 
       - name: Build on all supported architectures
         run: |
@@ -28,13 +45,14 @@ jobs:
 
   test-linux:
     name: Run tests on Linux amd64
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: setup go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Install test binaries
         env:
@@ -56,12 +74,13 @@ jobs:
 
   test-win:
     name: Build and run tests on Windows
+    needs: build
     runs-on: windows-latest
     steps:
       - name: setup go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: test
         run: bash ./test.sh

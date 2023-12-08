@@ -17,18 +17,18 @@ package libcni_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/containernetworking/cni/libcni"
-	"github.com/containernetworking/cni/pkg/version/legacy_examples"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+
+	"github.com/containernetworking/cni/libcni"
+	"github.com/containernetworking/cni/pkg/version/legacy_examples"
 )
 
 var _ = Describe("Backwards compatibility", func() {
@@ -36,7 +36,7 @@ var _ = Describe("Backwards compatibility", func() {
 
 	BeforeEach(func() {
 		var err error
-		cacheDirPath, err = ioutil.TempDir("", "cni_cachedir")
+		cacheDirPath, err = os.MkdirTemp("", "cni_cachedir")
 		Expect(err).NotTo(HaveOccurred())
 	})
 

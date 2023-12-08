@@ -1,4 +1,4 @@
-// Copyright 2016 CNI authors
+// Copyright 2022 CNI authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package types100_test
+package ns
 
-import (
-	"testing"
+import "github.com/containernetworking/cni/pkg/types"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-)
-
-func TestTypesCurrent(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Current Types Suite")
+func CheckNetNS(nsPath string) (bool, *types.Error) {
+	return false, nil
 }

@@ -17,15 +17,13 @@ package invoke_test
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
-
-	"github.com/containernetworking/cni/pkg/invoke"
-
-	noop_debug "github.com/containernetworking/cni/plugins/test/noop/debug"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/containernetworking/cni/pkg/invoke"
+	noop_debug "github.com/containernetworking/cni/plugins/test/noop/debug"
 )
 
 var _ = Describe("RawExec", func() {
@@ -41,7 +39,7 @@ var _ = Describe("RawExec", func() {
 	const reportResult = `{ "some": "result" }`
 
 	BeforeEach(func() {
-		debugFile, err := ioutil.TempFile("", "cni_debug")
+		debugFile, err := os.CreateTemp("", "cni_debug")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(debugFile.Close()).To(Succeed())
 		debugFileName = debugFile.Name()
