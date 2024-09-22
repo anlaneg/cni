@@ -32,6 +32,7 @@ const (
 	maxInterfaceNameLength = 15
 )
 
+/*指明cni容许的字符名称*/
 var cniReg = regexp.MustCompile(`^` + cniValidNameChars + `*$`)
 
 // ValidateContainerID will validate that the supplied containerID is not empty does not contain invalid characters
@@ -50,11 +51,11 @@ func ValidateContainerID(containerID string) *types.Error {
 // ValidateNetworkName will validate that the supplied networkName does not contain invalid characters
 func ValidateNetworkName(networkName string) *types.Error {
 	if networkName == "" {
-		/*containerID不得为空*/
+		/*网络名称不得为空*/
 		return types.NewError(types.ErrInvalidNetworkConfig, "missing network name:", "")
 	}
 	if !cniReg.MatchString(networkName) {
-		/*containerID不得包含非规定字符*/
+		/*网络名称不得包含非规定字符*/
 		return types.NewError(types.ErrInvalidNetworkConfig, "invalid characters found in network name", networkName)
 	}
 	return nil

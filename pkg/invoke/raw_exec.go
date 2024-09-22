@@ -28,10 +28,11 @@ import (
 )
 
 type RawExec struct {
+	/*仅需要指定stderr*/
 	Stderr io.Writer
 }
 
-/*通过pluginPath直接运行插件，并提供输入的json串及环境变量*/
+/*RawExec对象通过pluginPath直接运行插件，并向其提供输入的json串及环境变量，返回其*/
 func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string/*插件路径*/, stdinData []byte/*输入的json串*/, environ []string) ([]byte, error) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -61,7 +62,7 @@ func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string/*插件路�
 		}
 
 		// All other errors except than the busy text file
-		return nil, e.pluginErr(err, stdout.Bytes(), stderr.Bytes())
+		return nil, e.pluginErr(err, stdout.Bytes(), stderr.Bytes())/*返回错误输出结果*/
 	}
 
 	// Copy stderr to caller's buffer in case plugin printed to both
@@ -71,7 +72,7 @@ func (e *RawExec) ExecPlugin(ctx context.Context, pluginPath string/*插件路�
 		_, _ = stderr.WriteTo(e.Stderr)
 	}
 	
-	/*返回执行结果*/
+	/*返回执行结果,执行成功（这里有问题吧，5次之后就成功了？）*/
 	return stdout.Bytes(), nil
 }
 
@@ -79,17 +80,20 @@ func (e *RawExec) pluginErr(err error, stdout, stderr []byte) error {
 	emsg := types.Error{}
 	if len(stdout) == 0 {
 		if len(stderr) == 0 {
+			/*标准输出及标准错误输出均无内容*/
 			emsg.Msg = fmt.Sprintf("netplugin failed with no error message: %v", err)
 		} else {
+			/*标准输出无内容，但标准错误输出有内容*/
 			emsg.Msg = fmt.Sprintf("netplugin failed: %q", string(stderr))
 		}
 	} else if perr := json.Unmarshal(stdout, &emsg); perr != nil {
+		/*标准输出有内容，标准错误输出将被忽略，但在格式化输出时出错*/
 		emsg.Msg = fmt.Sprintf("netplugin failed but error parsing its diagnostic message %q: %v", string(stdout), perr)
 	}
 	return &emsg
 }
 
 /*在paths列表中查找plugin,获得其绝对路径*/
-func (e *RawExec) FindInPath(plugin string, paths []string) (string, error) {
+func (e *RawExec) FindInPath(plugin string/*插件名称*/, paths []string/*可查询插件路径列表*/) (string, error) {
 	return FindInPath(plugin, paths)
 }

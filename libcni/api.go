@@ -51,9 +51,13 @@ const (
 // the `runtimeConfig` from the network configuration is included
 // here.
 type RuntimeConf struct {
+	/*容器id*/
 	ContainerID string
+	/*network ns路径*/
 	NetNS       string
+	/*接口名称*/
 	IfName      string
+	/*cni参数*/
 	Args        [][2]string
 	// A dictionary of capability-specific data passed by the runtime
 	// to plugins as top-level keys in the 'runtimeConfig' dictionary
@@ -103,12 +107,14 @@ type GCArgs struct {
 }
 
 type CNI interface {
+	/*通过NetworkConfigList添加网络(有多组NetworkConfig)*/
 	AddNetworkList(ctx context.Context, net *NetworkConfigList, rt *RuntimeConf) (types.Result, error)
 	CheckNetworkList(ctx context.Context, net *NetworkConfigList, rt *RuntimeConf) error
 	DelNetworkList(ctx context.Context, net *NetworkConfigList, rt *RuntimeConf) error
 	GetNetworkListCachedResult(net *NetworkConfigList, rt *RuntimeConf) (types.Result, error)
 	GetNetworkListCachedConfig(net *NetworkConfigList, rt *RuntimeConf) ([]byte, *RuntimeConf, error)
 
+	/*通过NetworkConfig添加网络(有一个NetworkConfig)*/
 	AddNetwork(ctx context.Context, net *NetworkConfig, rt *RuntimeConf) (types.Result, error)
 	CheckNetwork(ctx context.Context, net *NetworkConfig, rt *RuntimeConf) error
 	DelNetwork(ctx context.Context, net *NetworkConfig, rt *RuntimeConf) error
@@ -125,8 +131,9 @@ type CNI interface {
 }
 
 type CNIConfig struct {
-	/*查询插件的路径列表*/
+	/*用于查询插件的路径列表*/
 	Path     []string
+	/*用于执行插件的辅助对象*/
 	exec     invoke.Exec
 	cacheDir string
 }
@@ -137,9 +144,9 @@ var _ CNI = &CNIConfig{}
 // NewCNIConfig returns a new CNIConfig object that will search for plugins
 // in the given paths and use the given exec interface to run those plugins,
 // or if the exec interface is not given, will use a default exec handler.
-func NewCNIConfig(path []string, exec invoke.Exec) *CNIConfig {
-	/*设置插件查询路径列表*/
-	return NewCNIConfigWithCacheDir(path, "", exec)
+func NewCNIConfig(path []string/*一组路径*/, exec invoke.Exec) *CNIConfig {
+	/*构造CNIConfig对象，设置插件查询路径列表*/
+	return NewCNIConfigWithCacheDir(path, ""/*cacheDir*/, exec)
 }
 
 // NewCNIConfigWithCacheDir returns a new CNIConfig object that will search for plugins
@@ -154,6 +161,7 @@ func NewCNIConfigWithCacheDir(path []string, cacheDir string, exec invoke.Exec) 
 	}
 }
 
+/*打包成一个参数*/
 func buildOneConfig(name, cniVersion string, orig *NetworkConfig, prevResult types.Result, rt *RuntimeConf) (*NetworkConfig, error) {
 	var err error
 
@@ -196,7 +204,8 @@ func injectRuntimeConfig(orig *NetworkConfig, rt *RuntimeConf) (*NetworkConfig, 
 
 	/*收集支持的capability对应的Args*/
 	rc := make(map[string]interface{})
-	/*capabilities是一个K,v结构，key指定能务，v指定是否支持*/
+	/*将network.capabilities中有的项，且rt中也有的项，添加进rc中，
+	capabilities是一个K,v结构，key指定能力，v指定是否支持*/
 	for capability, supported := range orig.Network.Capabilities {
 		if !supported {
 			/*跳过不支持的capability*/
@@ -223,9 +232,11 @@ func injectRuntimeConfig(orig *NetworkConfig, rt *RuntimeConf) (*NetworkConfig, 
 func (c *CNIConfig) ensureExec() invoke.Exec {
 	/*确认c.exec已初始化*/
 	if c.exec == nil {
-		/*初始化c.exec*/
+		/*当前未初始化，这里构造为invoke.DefaultExec对象*/
 		c.exec = &invoke.DefaultExec{
+			/*初始化为rawExec,指明标准错误输出*/
 			RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+			/*指定插件解码对象构造为version.PluginDecoder*/
 			PluginDecoder: version.PluginDecoder{},
 		}
 	}
@@ -495,21 +506,26 @@ func (c *CNIConfig) GetCachedAttachments(containerID string) ([]*NetworkAttachme
 }
 
 /*添加network*/
-func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net *NetworkConfig, prevResult types.Result, rt *RuntimeConf) (types.Result, error) {
+func (c *CNIConfig) addNetwork(ctx context.Context, name/*network名称*/, cniVersion string, net *NetworkConfig/*network配置*/, prevResult types.Result, rt *RuntimeConf) (types.Result, error) {
+	/*防止c.exec未初始化*/
 	c.ensureExec()
-	/*取插件执行路径*/
+	
+	/*查询并获取插件执行路径*/
 	pluginPath, err := c.exec.FindInPath(net.Network.Type/*此network类型为插件名称*/, c.Path)
 	if err != nil {
 		return nil, err
 	}
+	
 	/*检查containerid是否合乎约定*/
 	if err := utils.ValidateContainerID(rt.ContainerID); err != nil {
 		return nil, err
 	}
+	
 	/*检查network name是否合乎约定*/
 	if err := utils.ValidateNetworkName(name); err != nil {
 		return nil, err
 	}
+	
 	/*检查接口名称是否合乎约定*/
 	if err := utils.ValidateInterfaceName(rt.IfName); err != nil {
 		return nil, err
@@ -521,26 +537,27 @@ func (c *CNIConfig) addNetwork(ctx context.Context, name, cniVersion string, net
 		return nil, err
 	}
 
-	/*运行插件并返回运行结果*/
-	return invoke.ExecPluginWithResult(ctx, pluginPath/*插件路径*/, newConf.Bytes/*配置内容*/, c.args("ADD", rt)/*配置参数*/, c.exec)
+	/*运行插件并返回运行结果，可参见各cniVersion对应的Result结构体*/
+	return invoke.ExecPluginWithResult(ctx, pluginPath/*插件路径*/, newConf.Bytes/*配置内容*/, c.args("ADD", rt)/*将rt打包成配置参数*/, c.exec)
 }
 
 // AddNetworkList executes a sequence of plugins with the ADD command
 func (c *CNIConfig) AddNetworkList(ctx context.Context, list *NetworkConfigList, rt *RuntimeConf) (types.Result, error) {
 	var err error
 	var result types.Result
-	/*遍历此conflist中的所有network config，逐个添加*/
+	/*遍历此conflist中的所有NetworkConfig，逐个添加，如有一个失败者，则返回*/
 	for _, net := range list.Plugins {
-		result, err = c.addNetwork(ctx, list.Name, list.CNIVersion, net, result, rt)
+		result, err = c.addNetwork(ctx, list.Name, list.CNIVersion, net, result/*上一个配置为空*/, rt)
 		if err != nil {
 			return nil, fmt.Errorf("plugin %s failed (add): %w", pluginDescription(net.Network), err)
 		}
 	}
 
-	if err = c.cacheAdd(result, list.Bytes, list.Name, rt); err != nil {
+	if err = c.cacheAdd(result/*最后一个插件执行结果*/, list.Bytes, list.Name, rt); err != nil {
 		return nil, fmt.Errorf("failed to set network %q cached result: %w", list.Name, err)
 	}
 
+	/*返回最后一个执行结果*/
 	return result, nil
 }
 
@@ -893,7 +910,7 @@ func (c *CNIConfig) getStatusNetwork(ctx context.Context, net *NetworkConfig) er
 // =====
 func (c *CNIConfig) args(action string, rt *RuntimeConf) *invoke.Args {
 	return &invoke.Args{
-		Command:     action,
+		Command:     action,/*命令*/
 		ContainerID: rt.ContainerID,
 		NetNS:       rt.NetNS,
 		PluginArgs:  rt.Args,

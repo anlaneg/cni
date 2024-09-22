@@ -33,6 +33,7 @@ var supportedVersions = []string{"1.0.0", "1.1.0"}
 
 // Register converters for all versions less than the implemented spec version
 func init() {
+	/*载入时执行注册*/
 	// Up-converters
 	convert.RegisterConverter("0.1.0", supportedVersions, convertFrom02x)
 	convert.RegisterConverter("0.2.0", supportedVersions, convertFrom02x)
@@ -52,6 +53,7 @@ func init() {
 	convert.RegisterCreator(supportedVersions, NewResult)
 }
 
+/*完成此版本的json解析*/
 func NewResult(data []byte) (types.Result, error) {
 	result := &Result{}
 	if err := json.Unmarshal(data, result); err != nil {
@@ -89,9 +91,13 @@ func NewResultFromResult(result types.Result) (*Result, error) {
 // Result is what gets returned from the plugin (via stdout) to the caller
 type Result struct {
 	CNIVersion string         `json:"cniVersion,omitempty"`
+	/*接口信息*/
 	Interfaces []*Interface   `json:"interfaces,omitempty"`
+	/*ip配置信息*/
 	IPs        []*IPConfig    `json:"ips,omitempty"`
+	/*路由信息*/
 	Routes     []*types.Route `json:"routes,omitempty"`
+	/*dns信息*/
 	DNS        types.DNS      `json:"dns,omitempty"`
 }
 

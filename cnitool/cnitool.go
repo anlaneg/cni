@@ -47,7 +47,9 @@ const (
 func parseArgs(args string) ([][2]string, error) {
 	var result [][2]string
 
+	/*利用';'号划分语句，每个语句是一个key,value键值对*/
 	pairs := strings.Split(args, ";")
+	/*遍历这些key,value,产生出map*/
 	for _, pair := range pairs {
 		kv := strings.Split(pair, "=")
 		if len(kv) != 2 || kv[0] == "" || kv[1] == "" {
@@ -60,24 +62,36 @@ func parseArgs(args string) ([][2]string, error) {
 	return result, nil
 }
 
+/*用法：
+ *      echo '{"cniVersion":"0.4.0","name":"myptp","type":"ptp","ipMasq":true,
+ "ipam":{"type":"host-local","subnet":"172.16.29.0/24",
+ "routes":[{"dst":"0.0.0.0/0"}]}}' | sudo tee /etc/cni/net.d/10-myptp.conf
+ * 例如：CNI_PATH=./bin cnitool add myptp /var/run/netns/testing
+ * 可以看代码：https://github.com/containernetworking/plugins/blob/main/plugins/main/ptp/ptp.go
+	 以获知ptp插件如何具体完成以上的配置工作。
+ * 简单说：这个工具提供了一个libcni如何使用的示例，libcni具体实现了cni接口，cni接口本身关注的是cni传参的方式
+          及规范故只调成cni-plugin去完成具体的工作。
+*/
 func main() {
-	/*参数必须大于4*/
+	/*参数必须大于等于4*/
 	if len(os.Args) < 4 {
 		usage()
 	}
 
-	/*确定netconf对应的目录*/
+	/*利用环境变量确定netconf对应的目录*/
 	netdir := os.Getenv(EnvNetDir)
 	if netdir == "" {
+		/*未提定此环境变量，使用默认路径，/etc/cni/net.d*/
 		netdir = DefaultNetDir
 	}
-	/*取在netdir下指定名称的conflist配置*/
+	
+	/*取在netdir下相应名称的conflist配置*/
 	netconf, err := libcni.LoadConfList(netdir, os.Args[2])
 	if err != nil {
 		exit(err)
 	}
 
-	/*通过EnvCapabilityArgs,加载capabilityArgs*/
+	/*通过环境变量EnvCapabilityArgs,通过json解析加载capabilityArgs，为map类型*/
 	var capabilityArgs map[string]interface{}
 	capabilityArgsValue := os.Getenv(EnvCapabilityArgs)
 	if len(capabilityArgsValue) > 0 {
@@ -86,23 +100,25 @@ func main() {
 		}
 	}
 
-	/*通过EnvCNIArgs，加载cniArgs*/
+	/*通过环境变量EnvCNIArgs，加载cniArgs*/
 	var cniArgs [][2]string
 	args := os.Getenv(EnvCNIArgs)
 	if len(args) > 0 {
+		/*解析参数，生成kv map*/
 		cniArgs, err = parseArgs(args)
 		if err != nil {
 			exit(err)
 		}
 	}
 
-	/*确定ifname*/
+	/*通过环境变量EnvCNIIfname，尝试确定ifname*/
 	ifName, ok := os.LookupEnv(EnvCNIIfname)
 	if !ok {
+		/*没有指定环境变量，设置接口名为eth0*/
 		ifName = "eth0"
 	}
 
-	/*确定netns路径*/
+	/*确定netns路径，例如注释中提到的/var/run/netns/testing*/
 	netns := os.Args[3]
 	netns, err = filepath.Abs(netns)
 	if err != nil {
@@ -111,10 +127,10 @@ func main() {
 
 	// Generate the containerid by hashing the netns path
 	s := sha512.Sum512([]byte(netns))
-	containerID := fmt.Sprintf("cnitool-%x", s[:10]) /*生成container-id*/
+	containerID := fmt.Sprintf("cnitool-%x", s[:10]) /*利用netns路径生成container-id*/
 
-	/*自EnvCNIPATH中获取plgin的查找路径，并构造CNIConfig对象*/
-	cninet := libcni.NewCNIConfig(filepath.SplitList(os.Getenv(EnvCNIPath)), nil)
+	/*自环境变量EnvCNIPATH中获取plugin的查找路径列表，并构造CNIConfig对象*/
+	cninet := libcni.NewCNIConfig(filepath.SplitList(os.Getenv(EnvCNIPath)), nil/*将exec置为空*/)
 
 	/*利用以上参数，构造runtime conf*/
 	rt := &libcni.RuntimeConf{
@@ -127,14 +143,14 @@ func main() {
 
 	switch os.Args[1] {
 	case CmdAdd:
-		/*network添加*/
+		/*调用CNIConfig对象的AddNetworkList函数，执行network添加*/
 		result, err := cninet.AddNetworkList(context.TODO(), netconf, rt)
 		if result != nil {
 			_ = result.Print()
 		}
 		exit(err)
 	case CmdCheck:
-		/*network显示*/
+		/*network检查*/
 		err := cninet.CheckNetworkList(context.TODO(), netconf, rt)
 		exit(err)
 	case CmdDel:
@@ -145,7 +161,7 @@ func main() {
 
 func usage() {
 	/*指明工具用法*/
-	exe := filepath.Base(os.Args[0])
+	exe := filepath.Base(os.Args[0])/*程序名称*/
 
 	fmt.Fprintf(os.Stderr, "%s: Add, check, or remove network interfaces from a network namespace\n", exe)
 	fmt.Fprintf(os.Stderr, "  %s add   <net> <netns>\n", exe)

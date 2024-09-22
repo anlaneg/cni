@@ -46,11 +46,11 @@ func (e NoConfigsFoundError) Error() string {
 func ConfFromBytes(bytes []byte) (*NetworkConfig, error) {
 	/*定义NetworkConfig*/
 	conf := &NetworkConfig{Bytes: bytes, Network: &types.NetConf{}}
-	/*解析bytes,填充conf.Network*/
+	/*解析bytes（配置内容）,填充conf.Network*/
 	if err := json.Unmarshal(bytes, conf.Network); err != nil {
 		return nil, fmt.Errorf("error parsing configuration: %w", err)
 	}
-	/*必须指定network.Type*/
+	/*配置中必须指定network.Type，否则有误*/
 	if conf.Network.Type == "" {
 		return nil, fmt.Errorf("error parsing configuration: missing 'type'")
 	}
@@ -74,7 +74,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		return nil, fmt.Errorf("error parsing configuration list: %w", err)
 	}
 
-	/*取name配置，其必须为string类型*/
+	/*取name配置，其必须为string类型,即为network name*/
 	rawName, ok := rawList["name"]
 	if !ok {
 		return nil, fmt.Errorf("error parsing configuration list: no name")
@@ -97,6 +97,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 	/*取disableCheck,其必须为bool类型*/
 	disableCheck := false
 	if rawDisableCheck, ok := rawList["disableCheck"]; ok {
+		/*如果有disableCheck设置，则将其转换为true/false*/
 		disableCheck, ok = rawDisableCheck.(bool)
 		if !ok {
 			disableCheckStr, ok := rawDisableCheck.(string)
@@ -119,7 +120,7 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		Name:         name,
 		DisableCheck: disableCheck,
 		CNIVersion:   cniVersion,
-		Bytes:        bytes,
+		Bytes:        bytes,/*其它配置*/
 	}
 
 	/*取plugins，其必须为数组类型*/
@@ -137,13 +138,13 @@ func ConfListFromBytes(bytes []byte) (*NetworkConfigList, error) {
 		return nil, fmt.Errorf("error parsing configuration list: no plugins in list")
 	}
 
-	/*遍历plugins中所有成员，其为json串，利用其生成NetConf*/
+	/*遍历plugins中所有成员，其为json串，利用其生成NetworkConfig*/
 	for i, conf := range plugins {
 		newBytes, err := json.Marshal(conf)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal plugin config %d: %w", i, err)
 		}
-		/*利用newBytes生成netconf对象*/
+		/*利用newBytes生成NetworkConfig对象*/
 		netConf, err := ConfFromBytes(newBytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse plugin config %d: %w", i, err)
@@ -163,7 +164,7 @@ func ConfListFromFile(filename string) (*NetworkConfigList, error) {
 	return ConfListFromBytes(bytes)
 }
 
-/*收集满足后续的配置文件列表*/
+/*收集满足后缀的配置文件列表*/
 func ConfFiles(dir string/*目录名称*/, extensions []string/*要查找的文件后缀*/) ([]string, error) {
 	// In part, adapted from rkt/networking/podenv.go#listFiles
 	/*收集dir目录下所有文件*/
@@ -213,6 +214,7 @@ func LoadConf(dir, name string) (*NetworkConfig, error) {
 			return nil, err
 		}
 		if conf.Network.Name == name {
+			/*网络名称匹配，返回此conf*/
 			return conf, nil
 		}
 	}
@@ -227,7 +229,7 @@ func LoadConfList(dir, name string) (*NetworkConfigList, error) {
 		return nil, err
 	}
 	
-	/*针对组文件进行排序*/
+	/*针对这组文件进行排序*/
 	sort.Strings(files)
 
 	/*按顺序加载配置文件*/
@@ -257,7 +259,7 @@ func LoadConfList(dir, name string) (*NetworkConfigList, error) {
 
 		return nil, err
 	}
-	/*利用单个conf,构造ConfList*/
+	/*利用单个NetworkConfig,构造ConfList*/
 	return ConfListFromConf(singleConf)
 }
 
@@ -301,16 +303,17 @@ func ConfListFromConf(original *NetworkConfig) (*NetworkConfigList, error) {
 	// actually make sense. Otherwise, the generated json is littered with
 	// golang default values.
 
-	rawConfig := make(map[string]interface{})
+	rawConfig := make(map[string]interface{})/*插件还为空*/
+	/*将netwrokConfig的字节打成rawConfig*/
 	if err := json.Unmarshal(original.Bytes, &rawConfig); err != nil {
 		return nil, err
 	}
 
 	/*构造raw格式的list*/
 	rawConfigList := map[string]interface{}{
-		"name":       original.Network.Name,
-		"cniVersion": original.Network.CNIVersion,
-		"plugins":    []interface{}{rawConfig},
+		"name":       original.Network.Name,/*网络名称*/
+		"cniVersion": original.Network.CNIVersion,/*cni版本号*/
+		"plugins":    []interface{}{rawConfig},/*插件中指明的是networkConfig*/
 	}
 
 	/*将其打成json串*/
@@ -318,6 +321,6 @@ func ConfListFromConf(original *NetworkConfig) (*NetworkConfigList, error) {
 	if err != nil {
 		return nil, err
 	}
-	/*再由json串重新建立*/
+	/*再由json串重新建立，进行校验*/
 	return ConfListFromBytes(b)
 }

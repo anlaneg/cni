@@ -24,8 +24,8 @@ type ResultFactoryFunc func([]byte) (types.Result, error)
 
 type creator struct {
 	// CNI Result spec versions that createFn can create a Result for
-	versions []string /*一组版本*/
-	/*对应的createFn*/
+	versions []string /*支持的一组版本*/
+	/*此版本对应的createFn*/
 	createFn ResultFactoryFunc
 }
 
@@ -45,9 +45,9 @@ func findCreator(version string) *creator {
 
 // Create creates a CNI Result using the given JSON, or an error if the creation
 // could not be performed
-func Create(version string, bytes []byte) (types.Result, error) {
+func Create(version string/*要解析为的版本号*/, bytes []byte/*要解析的内容*/) (types.Result, error) {
 	if c := findCreator(version); c != nil {
-		/*通过此createFn创建*/
+		/*通过此createFn解析此字符串*/
 		return c.createFn(bytes)
 	}
 	return nil, fmt.Errorf("unsupported CNI result version %q", version)

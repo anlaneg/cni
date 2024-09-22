@@ -40,11 +40,13 @@ type Exec interface {
 // https://github.com/containernetworking/cni/issues/895
 func fixupResultVersion(netconf, result []byte) (string, []byte, error) {
 	versionDecoder := &version.ConfigDecoder{}
+	/*自输入的配置中解出cniVersion*/
 	confVersion, err := versionDecoder.Decode(netconf)
 	if err != nil {
 		return "", nil, err
 	}
 
+	/*将结果按json格式转换*/
 	var rawResult map[string]interface{}
 	if err := json.Unmarshal(result, &rawResult); err != nil {
 		return "", nil, fmt.Errorf("failed to unmarshal raw result: %w", err)
@@ -60,12 +62,15 @@ func fixupResultVersion(netconf, result []byte) (string, []byte, error) {
 	// is empty, while built-in decoders (correctly) substitute 0.1.0 for an
 	// empty version per the CNI spec.
 	if resultVerRaw, ok := rawResult["cniVersion"]; ok {
+		/*取结果中指明的cniVersion*/
 		resultVer, ok := resultVerRaw.(string)
 		if ok && resultVer != "" {
+			/*结果中明确指明了cniVersion，以此结果为准*/
 			return resultVer, result, nil
 		}
 	}
 
+	/*结果中没有指明cni Version,则以配置中的cniVersion为准*/
 	// If the cniVersion is not present or empty, assume the result is
 	// the same CNI spec version as the config
 	rawResult["cniVersion"] = confVersion
@@ -118,24 +123,26 @@ func fixupResultVersion(netconf, result []byte) (string, []byte, error) {
 //	return "", fmt.Errorf("failed to find plugin %s in paths %v", plugin, paths)
 // }
 
-func ExecPluginWithResult(ctx context.Context, pluginPath string, netconf []byte, args CNIArgs, exec Exec) (types.Result, error) {
+func ExecPluginWithResult(ctx context.Context, pluginPath string, netconf []byte, args CNIArgs/*cni参数*/, exec Exec) (types.Result, error) {
 	if exec == nil {
-		/*使用defaultExec*/
+		/*如果exec未指定，则使用defaultExec*/
 		exec = defaultExec
 	}
 
-	/*直接运行pluginPath对应的文件*/
+	/*直接运行pluginPath对应的文件，错误stdout,及err*/
 	stdoutBytes, err := exec.ExecPlugin(ctx, pluginPath/*插件路径*/, netconf/*输入的网络配置JSon串*/, args.AsEnv()/*环境变量*/)
 	if err != nil {
+		/*执行失败*/
 		return nil, err
 	}
 
+	/*输出中可能没有包含cniVersion,这里校正下*/
 	resultVersion, fixedBytes, err := fixupResultVersion(netconf, stdoutBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	/*返回运行结果*/
+	/*指定cniVersion并构造结果，返回结果*/
 	return create.Create(resultVersion, fixedBytes)
 }
 

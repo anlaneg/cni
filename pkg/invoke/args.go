@@ -43,16 +43,20 @@ func ArgsFromEnv() CNIArgs {
 type Args struct {
 	Command       string
 	ContainerID   string
+	/*network ns路径*/
 	NetNS         string
 	PluginArgs    [][2]string
+	/*插件参数*/
 	PluginArgsStr string
 	IfName        string
+	/*插件查询路径列表，按':'进行划分*/
 	Path          string
 }
 
 // Args implements the CNIArgs interface
 var _ CNIArgs = &Args{}
 
+/*将cni参数转换为环境变量*/
 func (args *Args) AsEnv() []string {
 	/*取当前进程env*/
 	env := os.Environ()
@@ -63,13 +67,19 @@ func (args *Args) AsEnv() []string {
 
 	// Duplicated values which come first will be overridden, so we must put the
 	// custom values in the end to avoid being overridden by the process environments.
-	/*将args中的内容转换为env,并返回*/
+	/*将args中的内容转换为环境变量数组,并返回*/
 	env = append(env,
+		/*cni命令*/
 		"CNI_COMMAND="+args.Command,
+		/*container名称*/
 		"CNI_CONTAINERID="+args.ContainerID,
+		/*network ns路径*/
 		"CNI_NETNS="+args.NetNS,
+		/*CNI插件参数*/
 		"CNI_ARGS="+pluginArgsStr,
+		/*接口名称*/
 		"CNI_IFNAME="+args.IfName,
+		/*CNI插件路径查询列表*/
 		"CNI_PATH="+args.Path,
 	)
 	return dedupEnv(env)

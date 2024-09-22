@@ -100,6 +100,7 @@ func executeHooks(netnsName string, hooks [][]string) {
 }
 
 func cmdAdd(args *skel.CmdArgs) error {
+	/*自标准输出中解析networkConfig*/
 	netConf, _ := parseConf(args.StdinData)
 	// Output CNI
 	if netConf.CNIOutput != "" {

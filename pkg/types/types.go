@@ -56,20 +56,37 @@ func (n *IPNet) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+/*以下为一个摘自网络的配置示例：
+	'{
+	"cniVersion":"0.4.0",
+	"name":"myptp",
+	"type":"ptp",
+	"ipMasq":true,
+	"ipam":{
+		"type":"host-local",
+		"subnet":"172.16.29.0/24",
+		"routes":[{"dst":"0.0.0.0/0"}]
+		}
+	}'
+*/
 // NetConf describes a network.
 type NetConf struct {
 	/*cni版本号*/
 	CNIVersion string `json:"cniVersion,omitempty"`
 
-	/*network名称*/
+	/*network名称，cnitool通过此名称可以找到相应的网络*/
 	Name         string          `json:"name,omitempty"`
+	/*网络类型,为插件名称*/
 	Type         string          `json:"type,omitempty"`
+	/*容许为空*/
 	Capabilities map[string]bool `json:"capabilities,omitempty"`
+	/*ip地址*/
 	IPAM         IPAM            `json:"ipam,omitempty"`
 	/*dns相关配置*/
 	DNS          DNS             `json:"dns"`
 
 	RawPrevResult map[string]interface{} `json:"prevResult,omitempty"`
+	/*要实现的接口*/
 	PrevResult    Result                 `json:"-"`
 }
 
